@@ -4,8 +4,8 @@
 const SHEET_URL =
   "https://script.google.com/macros/s/AKfycby7sBvzh39iPd7_ov8Jsz_FYE2_pir_kPAFd7Swwl6Pks7SxHpuL8ktsJSXf56EhnWH/exec";
 
-const STORAGE_KEY_CURRENT_USER = "airbounty_current_phone";
-const USER_PREFIX = "airbounty_user_";
+const STORAGE_KEY_CURRENT_USER = "airbounty_current_email";
+const USER_PREFIX = "airbounty_user_email_";
 
 const OTP_EXPIRY_SECONDS = 60;
 
@@ -14,18 +14,18 @@ const OTP_EXPIRY_SECONDS = 60;
 ========================= */
 const loginScreen       = document.getElementById("loginScreen");
 const appRoot           = document.getElementById("appRoot");
-const phoneStep         = document.getElementById("phoneStep");
+const emailStep         = document.getElementById("emailStep");
 const otpStep           = document.getElementById("otpStep");
-const phoneInput        = document.getElementById("phoneInput");
-const phoneError        = document.getElementById("phoneError");
-const maskedPhone       = document.getElementById("maskedPhone");
+const emailInput        = document.getElementById("emailInput");
+const emailError        = document.getElementById("emailError");
+const maskedEmail       = document.getElementById("maskedEmail");
 const mockOTPCode       = document.getElementById("mockOTPCode");
 const otpError          = document.getElementById("otpError");
 const returnHint        = document.getElementById("returnHint");
-const returnPhone       = document.getElementById("returnPhone");
+const returnEmail       = document.getElementById("returnEmail");
 const resendText        = document.getElementById("resendText");
 const resendTimer       = document.getElementById("resendTimer");
-const userPhoneDisplay  = document.getElementById("userPhoneDisplay");
+const userEmailDisplay  = document.getElementById("userEmailDisplay");
 const tokenEl           = document.getElementById("token");
 const missionCountEl    = document.getElementById("missionCount");
 const modal             = document.getElementById("modal");
@@ -43,7 +43,7 @@ const otpDigits = [
 /* =========================
    STATE
 ========================= */
-let currentUser       = null; // { phone, missions, tokens }
+let currentUser       = null; // { email, missions, tokens }
 let generatedOTP      = null;
 let otpExpiryTime     = null;
 let resendCountdown   = null;
@@ -51,23 +51,24 @@ let resendCountdown   = null;
 /* =========================
    HELPERS – per-user storage
 ========================= */
-function getUserKey(phone) {
-  return USER_PREFIX + phone.replace(/\D/g, '');
+function getUserKey(email) {
+  // Simple clean key from email
+  return USER_PREFIX + email.replace(/[^a-zA-Z0-9]/g, '_');
 }
 
-function loadUserData(phone) {
-  const raw = localStorage.getItem(getUserKey(phone));
+function loadUserData(email) {
+  const raw = localStorage.getItem(getUserKey(email));
   if (raw) return JSON.parse(raw);
-  return { phone, missions: 0, tokens: 0 };
+  return { email, missions: 0, tokens: 0 };
 }
 
 function saveUserData(data) {
-  localStorage.setItem(getUserKey(data.phone), JSON.stringify(data));
+  localStorage.setItem(getUserKey(data.email), JSON.stringify(data));
 }
 
-function setCurrentUser(phone) {
-  localStorage.setItem(STORAGE_KEY_CURRENT_USER, phone);
-  currentUser = loadUserData(phone);
+function setCurrentUser(email) {
+  localStorage.setItem(STORAGE_KEY_CURRENT_USER, email);
+  currentUser = loadUserData(email);
   saveUserData(currentUser);
 }
 
@@ -76,24 +77,25 @@ function clearCurrentUser() {
   currentUser = null;
 }
 
-function getCurrentUserPhone() {
+function getCurrentUserEmail() {
   return localStorage.getItem(STORAGE_KEY_CURRENT_USER);
 }
 
 /* =========================
-   PHONE VALIDATION
+   EMAIL VALIDATION
 ========================= */
-function validatePhone(phone) {
-  const clean = phone.replace(/\D/g, '');
-  // Thai mobile: 10 digits starting with 0
-  return /^0[0-9]{9}$/.test(clean);
+function validateEmail(email) {
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return re.test(email);
 }
 
-function formatPhoneMask(phone) {
-  const clean = phone.replace(/\D/g, '');
-  if (clean.length !== 10) return phone;
-  // 08X-XXX-XXXX
-  return clean[0] + clean[1] + clean[2] + '-XXX-' + clean.slice(-4);
+function formatEmailMask(email) {
+  if (!email || !email.includes('@')) return email;
+  const [local, domain] = email.split('@');
+  if (local.length <= 3) {
+    return local + '***@' + domain;
+  }
+  return local.substring(0, 3) + '***@' + domain;
 }
 
 /* =========================
@@ -108,16 +110,16 @@ function showApp() {
 function showLogin() {
   loginScreen.style.display = "flex";
   appRoot.style.display = "none";
-  phoneStep.style.display = "flex";
+  emailStep.style.display = "flex";
   otpStep.style.display = "none";
-  phoneInput.value = "";
-  phoneError.style.display = "none";
+  emailInput.value = "";
+  emailError.style.display = "none";
   clearOTPInputs();
 }
 
 function syncUI() {
   if (!currentUser) return;
-  userPhoneDisplay.textContent = formatPhoneMask(currentUser.phone);
+  userEmailDisplay.textContent = currentUser.email;
   tokenEl.textContent          = currentUser.tokens;
   missionCountEl.textContent   = currentUser.missions;
 }
@@ -126,9 +128,9 @@ function syncUI() {
    BOOT – check returning user
 ========================= */
 (function boot() {
-  const saved = getCurrentUserPhone();
+  const saved = getCurrentUserEmail();
   if (saved) {
-    returnPhone.textContent = formatPhoneMask(saved);
+    returnEmail.textContent = saved;
     returnHint.style.display = "flex";
   }
 })();
@@ -137,10 +139,10 @@ function syncUI() {
    STEP 1: SEND OTP
 ========================= */
 function sendOTP() {
-  const phone = phoneInput.value.trim();
+  const email = emailInput.value.trim();
 
-  if (!validatePhone(phone)) {
-    showPhoneError();
+  if (!validateEmail(email)) {
+    showEmailError();
     return;
   }
 
@@ -151,15 +153,15 @@ function sendOTP() {
   // Show OTP in mock display
   mockOTPCode.textContent = generatedOTP;
 
-  // TODO: Replace with actual SMS API call
-  // sendSMSviaAPI(phone, generatedOTP);
+  // TODO: Replace with actual Email API call
+  // sendEmailviaAPI(email, generatedOTP);
 
-  console.log(`[MOCK SMS] Sending OTP ${generatedOTP} to ${phone}`);
+  console.log(`[MOCK EMAIL] Sending OTP ${generatedOTP} to ${email}`);
 
   // Switch to OTP step
-  phoneStep.style.display = "none";
+  emailStep.style.display = "none";
   otpStep.style.display = "flex";
-  maskedPhone.textContent = formatPhoneMask(phone);
+  maskedEmail.textContent = formatEmailMask(email);
 
   clearOTPInputs();
   otpDigits[0].focus();
@@ -167,21 +169,19 @@ function sendOTP() {
   startResendTimer();
 }
 
-function showPhoneError() {
-  phoneError.style.display = "block";
-  phoneError.style.animation = "none";
-  void phoneError.offsetWidth;
-  phoneError.style.animation = "";
-  phoneInput.focus();
+function showEmailError() {
+  emailError.style.display = "block";
+  emailError.style.animation = "none";
+  void emailError.offsetWidth;
+  emailError.style.animation = "";
+  emailInput.focus();
 }
 
-phoneInput.addEventListener("input", () => {
-  phoneError.style.display = "none";
-  // Auto-format or limit to numbers only
-  phoneInput.value = phoneInput.value.replace(/[^0-9]/g, '');
+emailInput.addEventListener("input", () => {
+  emailError.style.display = "none";
 });
 
-phoneInput.addEventListener("keydown", (e) => {
+emailInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") sendOTP();
 });
 
@@ -210,8 +210,8 @@ function verifyOTP() {
   }
 
   // Success!
-  const phone = phoneInput.value.trim();
-  setCurrentUser(phone);
+  const email = emailInput.value.trim();
+  setCurrentUser(email);
   stopResendTimer();
   showApp();
 }
@@ -284,8 +284,8 @@ function resendOTP() {
   otpExpiryTime = Date.now() + (OTP_EXPIRY_SECONDS * 1000);
   mockOTPCode.textContent = generatedOTP;
 
-  const phone = phoneInput.value.trim();
-  console.log(`[MOCK SMS] Resending OTP ${generatedOTP} to ${phone}`);
+  const email = emailInput.value.trim();
+  console.log(`[MOCK EMAIL] Resending OTP ${generatedOTP} to ${email}`);
 
   clearOTPInputs();
   otpDigits[0].focus();
@@ -320,12 +320,12 @@ function stopResendTimer() {
 }
 
 /* =========================
-   BACK TO PHONE
+   BACK TO EMAIL
 ========================= */
-function backToPhone() {
+function backToEmail() {
   otpStep.style.display = "none";
-  phoneStep.style.display = "flex";
-  phoneInput.focus();
+  emailStep.style.display = "flex";
+  emailInput.focus();
   stopResendTimer();
 }
 
@@ -333,7 +333,7 @@ function backToPhone() {
    QUICK LOGIN (returning user)
 ========================= */
 function handleQuickLogin() {
-  const saved = getCurrentUserPhone();
+  const saved = getCurrentUserEmail();
   if (!saved) return;
   setCurrentUser(saved);
   showApp();
@@ -360,6 +360,7 @@ let marker     = null;
 ========================= */
 function openModal() {
   modal.classList.add("active");
+  resetImageUpload();
 
   if (!navigator.geolocation) {
     gpsDisplay.textContent = "อุปกรณ์ไม่รองรับ GPS";
@@ -444,6 +445,56 @@ document.getElementById("openMapBtn").onclick = () => {
 };
 
 /* =========================
+   IMAGE UPLOAD
+========================= */
+let currentImageBase64 = null;
+
+window.handleImageUpload = function(input) {
+  if (input.files && input.files[0]) {
+    const file = input.files[0];
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+      currentImageBase64 = e.target.result;
+      const previewImage = document.getElementById('previewImage');
+      const imagePlaceholder = document.getElementById('imagePlaceholder');
+      const removeImageBtn = document.getElementById('removeImageBtn');
+
+      if (previewImage) {
+        previewImage.src = currentImageBase64;
+        previewImage.style.display = 'block';
+      }
+      if (imagePlaceholder) imagePlaceholder.style.display = 'none';
+      if (removeImageBtn) removeImageBtn.style.display = 'flex';
+    };
+
+    reader.readAsDataURL(file);
+  }
+};
+
+window.removeImage = function(event) {
+  if (event) event.stopPropagation();
+  resetImageUpload();
+};
+
+function resetImageUpload() {
+  const input = document.getElementById('incidentImage');
+  const previewImage = document.getElementById('previewImage');
+  const imagePlaceholder = document.getElementById('imagePlaceholder');
+  const removeImageBtn = document.getElementById('removeImageBtn');
+
+  if (input) input.value = '';
+  currentImageBase64 = null;
+  
+  if (previewImage) {
+    previewImage.src = '';
+    previewImage.style.display = 'none';
+  }
+  if (imagePlaceholder) imagePlaceholder.style.display = 'flex';
+  if (removeImageBtn) removeImageBtn.style.display = 'none';
+}
+
+/* =========================
    SUBMIT MISSION
 ========================= */
 function submitMission() {
@@ -461,15 +512,17 @@ function submitMission() {
   fetch(SHEET_URL, {
     method: "POST",
     body: JSON.stringify({
-      username:     currentUser.phone,
+      username:     currentUser.email,
       mission_type: type,
       token:        reward,
       lat:          currentLat,
-      lng:          currentLng
+      lng:          currentLng,
+      image:        currentImageBase64 || ""
     })
   });
 
   showToast(reward);
+  resetImageUpload();
 }
 
 /* =========================

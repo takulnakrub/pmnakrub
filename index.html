@@ -42,78 +42,77 @@
         <h1 class="login-title">ไม้ขีด</h1>
         <p class="login-subtitle">แจ้งเหตุเผา ควัน ไฟป่า<br>เพื่ออากาศที่สะอาดขึ้น</p>
 
-        <!-- STEP 1: Phone Number Input -->
-        <div id="phoneStep" class="login-form">
+        <!-- STEP 1: Email Input -->
+        <div id="emailStep" class="login-form">
           <div class="login-input-wrap">
-            <span class="login-input-icon">📱</span>
+            <span class="login-input-icon">✉️</span>
             <input
-              type="tel"
-              id="phoneInput"
+              type="email"
+              id="emailInput"
               name="ชื่อผู้ใช้"
               class="login-input"
-              placeholder="เบอร์โทรศัพท์ (เช่น 0812345678)"
-              maxlength="10"
-              autocomplete="off"
+              placeholder="อีเมล (เช่น user@example.com)"
+              autocomplete="email"
             />
           </div>
-          <div id="phoneError" class="login-error" style="display:none;">กรุณากรอกเบอร์โทรที่ถูกต้อง</div>
+          <div id="emailError" class="login-error" style="display:none;">กรุณากรอกอีเมลที่ถูกต้อง</div>
           <button class="login-btn" onclick="sendOTP()">
             <span class="login-btn-text">ส่งรหัส OTP</span>
             <span class="login-btn-arrow">→</span>
           </button>
         </div>
 
-        <!-- STEP 2: OTP Verification (hidden initially) -->
-        <div id="otpStep" class="login-form" style="display:none;">
-          <p class="otp-sent-msg">
-            📩 ส่งรหัส 6 หลักไปที่<br>
-            <strong id="maskedPhone">08X-XXX-XXXX</strong>
-          </p>
+<!-- STEP 2: OTP Verification (hidden initially) -->
+<div id="otpStep" class="login-form" style="display:none;">
+  <p class="otp-sent-msg">
+    📩 ส่งรหัส 6 หลักไปที่<br>
+    <strong id="maskedEmail">use***@example.com</strong>
+  </p>
 
-          <!-- Mock OTP Display (for development) -->
-          <div class="mock-otp-display">
-            <div class="mock-label">🔧 รหัส OTP ของคุณ (Mock):</div>
-            <div id="mockOTPCode" class="mock-code">------</div>
-          </div>
-
-          <div class="otp-inputs">
-            <input type="text" maxlength="1" class="otp-digit" id="otp1" />
-            <input type="text" maxlength="1" class="otp-digit" id="otp2" />
-            <input type="text" maxlength="1" class="otp-digit" id="otp3" />
-            <input type="text" maxlength="1" class="otp-digit" id="otp4" />
-            <input type="text" maxlength="1" class="otp-digit" id="otp5" />
-            <input type="text" maxlength="1" class="otp-digit" id="otp6" />
-          </div>
-
-          <div id="otpError" class="login-error" style="display:none;">รหัส OTP ไม่ถูกต้อง</div>
-
-          <button class="login-btn" onclick="verifyOTP()">
-            <span class="login-btn-text">ยืนยันรหัส</span>
-            <span class="login-btn-check">✓</span>
-          </button>
-
-          <button class="resend-btn" onclick="resendOTP()">
-            <span class="resend-icon">🔄</span>
-            <span id="resendText">ส่งรหัสใหม่</span>
-            <span id="resendTimer" style="display:none;">(60)</span>
-          </button>
-
-          <button class="back-btn" onclick="backToPhone()">
-            ← เปลี่ยนเบอร์โทร
-          </button>
-        </div>
-
-        <!-- Returning user hint -->
-        <div id="returnHint" class="return-hint" style="display:none;">
-          <span class="return-hint-icon">👋</span>
-          <span class="return-hint-text">สวัสดีครั้งใหม่ <strong id="returnPhone"></strong></span>
-          <button class="return-hint-btn" onclick="handleQuickLogin()">เข้า →</button>
-        </div>
-
-        <p class="login-footer-text">เปลี่ยนการแจ้งเหตุ → เป็นภารกิจ</p>
-      </div>
-    </div>
+  <!-- OTP INPUT -->
+  <div class="otp-inputs">
+    <input type="text" maxlength="1" class="otp-digit" id="otp1" inputmode="numeric" />
+    <input type="text" maxlength="1" class="otp-digit" id="otp2" inputmode="numeric" />
+    <input type="text" maxlength="1" class="otp-digit" id="otp3" inputmode="numeric" />
+    <input type="text" maxlength="1" class="otp-digit" id="otp4" inputmode="numeric" />
+    <input type="text" maxlength="1" class="otp-digit" id="otp5" inputmode="numeric" />
+    <input type="text" maxlength="1" class="otp-digit" id="otp6" inputmode="numeric" />
   </div>
+
+  <!-- ERROR -->
+  <div id="otpError" class="login-error" style="display:none;">
+    รหัส OTP ไม่ถูกต้องหรือหมดอายุ
+  </div>
+
+  <!-- VERIFY -->
+  <button class="login-btn" onclick="verifyOTP()">
+    <span class="login-btn-text">ยืนยันรหัส</span>
+    <span class="login-btn-check">✓</span>
+  </button>
+
+  <!-- RESEND -->
+  <button class="resend-btn" onclick="resendOTP()">
+    <span class="resend-icon">🔄</span>
+    <span id="resendText">ส่งรหัสใหม่</span>
+    <span id="resendTimer" style="display:none;">(60)</span>
+  </button>
+
+  <!-- BACK -->
+  <button class="back-btn" onclick="backToEmail()">
+    ← เปลี่ยนอีเมล
+  </button>
+</div>
+
+<!-- Returning user hint -->
+<div id="returnHint" class="return-hint" style="display:none;">
+  <span class="return-hint-icon">👋</span>
+  <span class="return-hint-text">
+    สวัสดีครั้งใหม่ <strong id="returnEmail"></strong>
+  </span>
+  <button class="return-hint-btn" onclick="handleQuickLogin()">เข้า →</button>
+</div>
+
+<p class="login-footer-text">เปลี่ยนการแจ้งเหตุ → เป็นภารกิจ</p>
 
   <!-- ================= MAIN APP ================= -->
   <div id="appRoot" class="app-root" style="display:none;">
@@ -146,8 +145,8 @@
 
           <!-- User badge + logout -->
           <div class="user-badge">
-            <span class="user-avatar">📱</span>
-            <span id="userPhoneDisplay" class="user-name">08X-XXX-XXXX</span>
+            <span class="user-avatar">✉️</span>
+            <span id="userEmailDisplay" class="user-name">user@example.com</span>
             <button class="logout-btn" onclick="handleLogout()" title="ออกจากระบบ">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -279,6 +278,22 @@
                   <span class="event-name">โรงงาน</span>
                 </div>
               </label>
+            </div>
+          </div>
+
+          <!-- Image Upload Section -->
+          <div class="form-group">
+            <label class="form-label">รูปภาพจุดเกิดเหตุ</label>
+            <div class="image-upload-container">
+              <input type="file" id="incidentImage" accept="image/*" style="display: none;" onchange="handleImageUpload(this)">
+              <div class="image-preview-wrapper" onclick="document.getElementById('incidentImage').click()">
+                <div id="imagePlaceholder" class="image-placeholder">
+                  <span class="upload-icon">📷</span>
+                  <span class="upload-text">แตะเพื่อถ่ายรูป / เลือกรูป</span>
+                </div>
+                <img id="previewImage" class="preview-image" style="display: none;" />
+                <button id="removeImageBtn" class="remove-image-btn" style="display: none;" onclick="removeImage(event)">✕</button>
+              </div>
             </div>
           </div>
 

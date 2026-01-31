@@ -1197,11 +1197,15 @@ body {
 
 .toast-icon { font-size: 28px; }
 
+.toast-text {
+  display: flex;
+  flex-direction: column;
+}
+
 .toast-title {
-  font-size: 16px;
   font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 2px;
+  color: var(--success);
+  font-size: 16px;
 }
 
 .toast-message {
@@ -1209,87 +1213,78 @@ body {
   color: var(--text-secondary);
 }
 
-#toastReward {
-  color: var(--primary);
-  font-weight: 700;
-}
-
 /* =======================================
-   Responsive
+   Image Upload
 ======================================= */
-@media (max-width: 768px) {
-  .header-content {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--space-md);
-  }
-
-  .logo-section { justify-content: center; }
-
-  .header-right {
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-sm);
-  }
-
-  .stats-row { justify-content: center; }
-
-  .hero-title { font-size: 32px; }
-  .hero-description { font-size: 16px; }
-
-  .quick-stats {
-    flex-direction: column;
-    gap: var(--space-md);
-  }
-
-  .divider { width: 100%; height: 1px; }
-
-  .info-cards { grid-template-columns: 1fr; }
-  .event-types { grid-template-columns: 1fr; }
-  .modal-footer { flex-direction: column; }
-
-  .toast {
-    right: var(--space-md);
-    left: var(--space-md);
-  }
-
-  .otp-digit {
-    width: 44px;
-    height: 52px;
-    font-size: 24px;
-  }
+.image-upload-container {
+  width: 100%;
 }
 
-@media (max-width: 480px) {
-  .top-bar { padding: var(--space-md); }
-  .hero-section { padding: var(--space-lg) var(--space-md); }
-  .app-title { font-size: 24px; }
-  .stat-card { padding: var(--space-sm); }
-  .stat-value { font-size: 18px; }
-  .hero-title { font-size: 28px; }
-  .cta-button {
-    padding: var(--space-md) var(--space-lg);
-    font-size: 18px;
-  }
+.image-preview-wrapper {
+  position: relative;
+  width: 100%;
+  height: 200px;
+  border: 2px dashed rgba(255, 107, 53, 0.3);
+  border-radius: var(--radius-md);
+  background: rgba(255, 107, 53, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
 
-  .login-content { padding: var(--space-lg); }
-  .login-title { font-size: 36px; }
-  .login-subtitle { font-size: 15px; }
+.image-preview-wrapper:hover {
+  border-color: var(--primary);
+  background: rgba(255, 107, 53, 0.1);
+}
 
-  .logo-icon {
-    width: 52px;
-    height: 52px;
-  }
+.image-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--text-secondary);
+  transition: all 0.3s ease;
+}
 
-  .login-fire {
-    width: 80px;
-    height: 80px;
-  }
+.upload-icon {
+  font-size: 48px;
+  opacity: 0.7;
+}
 
-  .otp-inputs { gap: 6px; }
-  .otp-digit {
-    width: 40px;
-    height: 48px;
-    font-size: 22px;
-  }
+.upload-text {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
+}
+
+.remove-image-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.remove-image-btn:hover {
+  background: rgba(255, 65, 54, 0.9);
+  transform: scale(1.1);
 }
