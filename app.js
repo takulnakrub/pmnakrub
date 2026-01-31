@@ -4,8 +4,8 @@
 const SHEET_URL =
   "https://script.google.com/macros/s/AKfycby7sBvzh39iPd7_ov8Jsz_FYE2_pir_kPAFd7Swwl6Pks7SxHpuL8ktsJSXf56EhnWH/exec";
 
-const STORAGE_KEY_CURRENT_USER = "airbounty_current_email";
-const USER_PREFIX = "airbounty_user_email_";
+const STORAGE_KEY_CURRENT_USER = "airbounty_current_user_data";
+const USER_PREFIX = "airbounty_user_v2_";
 
 const OTP_EXPIRY_SECONDS = 60;
 
@@ -14,18 +14,19 @@ const OTP_EXPIRY_SECONDS = 60;
 ========================= */
 const loginScreen       = document.getElementById("loginScreen");
 const appRoot           = document.getElementById("appRoot");
-const emailStep         = document.getElementById("emailStep");
+const loginStep         = document.getElementById("loginStep");
 const otpStep           = document.getElementById("otpStep");
+const phoneInput        = document.getElementById("phoneInput");
+const phoneError        = document.getElementById("phoneError");
 const emailInput        = document.getElementById("emailInput");
 const emailError        = document.getElementById("emailError");
 const maskedEmail       = document.getElementById("maskedEmail");
-const mockOTPCode       = document.getElementById("mockOTPCode");
 const otpError          = document.getElementById("otpError");
 const returnHint        = document.getElementById("returnHint");
-const returnEmail       = document.getElementById("returnEmail");
+const returnPhone       = document.getElementById("returnPhone");
 const resendText        = document.getElementById("resendText");
 const resendTimer       = document.getElementById("resendTimer");
-const userEmailDisplay  = document.getElementById("userEmailDisplay");
+const userPhoneDisplay  = document.getElementById("userPhoneDisplay");
 const tokenEl           = document.getElementById("token");
 const missionCountEl    = document.getElementById("missionCount");
 const modal             = document.getElementById("modal");
@@ -43,7 +44,7 @@ const otpDigits = [
 /* =========================
    STATE
 ========================= */
-let currentUser       = null; // { email, missions, tokens }
+let currentUser       = null; // { phone, email, missions, tokens }
 let generatedOTP      = null;
 let otpExpiryTime     = null;
 let resendCountdown   = null;
@@ -51,24 +52,28 @@ let resendCountdown   = null;
 /* =========================
    HELPERS – per-user storage
 ========================= */
-function getUserKey(email) {
-  // Simple clean key from email
-  return USER_PREFIX + email.replace(/[^a-zA-Z0-9]/g, '_');
+function getUserKey(phone) {
+  // Use phone as unique ID
+  return USER_PREFIX + phone.replace(/\D/g, '');
 }
 
-function loadUserData(email) {
-  const raw = localStorage.getItem(getUserKey(email));
+function loadUserData(phone) {
+  const raw = localStorage.getItem(getUserKey(phone));
   if (raw) return JSON.parse(raw);
-  return { email, missions: 0, tokens: 0 };
+  return { phone, email: "", missions: 0, tokens: 0 };
 }
 
 function saveUserData(data) {
-  localStorage.setItem(getUserKey(data.email), JSON.stringify(data));
+  localStorage.setItem(getUserKey(data.phone), JSON.stringify(data));
 }
 
-function setCurrentUser(email) {
-  localStorage.setItem(STORAGE_KEY_CURRENT_USER, email);
-  currentUser = loadUserData(email);
+function setCurrentUser(phone, email) {
+  let data = loadUserData(phone);
+  // Update email if changed or new
+  if (email) data.email = email;
+  
+  currentUser = data;
+  localStorage.setItem(STORAGE_KEY_CURRENT_USER, JSON.stringify(currentUser));
   saveUserData(currentUser);
 }
 
@@ -77,16 +82,31 @@ function clearCurrentUser() {
   currentUser = null;
 }
 
-function getCurrentUserEmail() {
-  return localStorage.getItem(STORAGE_KEY_CURRENT_USER);
+function getCurrentUserSaved() {
+  const raw = localStorage.getItem(STORAGE_KEY_CURRENT_USER);
+  if (raw) return JSON.parse(raw);
+  return null;
 }
 
 /* =========================
-   EMAIL VALIDATION
+   VALIDATION
 ========================= */
+function validatePhone(phone) {
+  const clean = phone.replace(/\D/g, '');
+  // Thai mobile: 10 digits starting with 0
+  return /^0[0-9]{9}$/.test(clean);
+}
+
 function validateEmail(email) {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return re.test(email);
+}
+
+function formatPhoneMask(phone) {
+  const clean = phone.replace(/\D/g, '');
+  if (clean.length !== 10) return phone;
+  // 08X-XXX-XXXX
+  return clean[0] + clean[1] + clean[2] + '-XXX-' + clean.slice(-4);
 }
 
 function formatEmailMask(email) {
@@ -110,16 +130,18 @@ function showApp() {
 function showLogin() {
   loginScreen.style.display = "flex";
   appRoot.style.display = "none";
-  emailStep.style.display = "flex";
+  loginStep.style.display = "flex";
   otpStep.style.display = "none";
+  phoneInput.value = "";
   emailInput.value = "";
+  phoneError.style.display = "none";
   emailError.style.display = "none";
   clearOTPInputs();
 }
 
 function syncUI() {
   if (!currentUser) return;
-  userEmailDisplay.textContent = currentUser.email;
+  userPhoneDisplay.textContent = formatPhoneMask(currentUser.phone);
   tokenEl.textContent          = currentUser.tokens;
   missionCountEl.textContent   = currentUser.missions;
 }
@@ -128,9 +150,9 @@ function syncUI() {
    BOOT – check returning user
 ========================= */
 (function boot() {
-  const saved = getCurrentUserEmail();
-  if (saved) {
-    returnEmail.textContent = saved;
+  const saved = getCurrentUserSaved();
+  if (saved && saved.phone) {
+    returnPhone.textContent = formatPhoneMask(saved.phone);
     returnHint.style.display = "flex";
   }
 })();
@@ -139,27 +161,45 @@ function syncUI() {
    STEP 1: SEND OTP
 ========================= */
 function sendOTP() {
+  const phone = phoneInput.value.trim();
   const email = emailInput.value.trim();
+
+  let valid = true;
+
+  if (!validatePhone(phone)) {
+    showPhoneError();
+    valid = false;
+  }
 
   if (!validateEmail(email)) {
     showEmailError();
-    return;
+    valid = false;
   }
 
-  // Generate 6-digit OTP
+  if (!valid) return;
+
+  // Generate 6-digit OTP locally (Client-side generation for GAS relay)
   generatedOTP = String(Math.floor(100000 + Math.random() * 900000));
   otpExpiryTime = Date.now() + (OTP_EXPIRY_SECONDS * 1000);
 
-  // Show OTP in mock display
-  mockOTPCode.textContent = generatedOTP;
+  console.log(`[SYSTEM] Generated OTP: ${generatedOTP} for Phone: ${phone}, Email: ${email}`);
 
-  // TODO: Replace with actual Email API call
-  // sendEmailviaAPI(email, generatedOTP);
-
-  console.log(`[MOCK EMAIL] Sending OTP ${generatedOTP} to ${email}`);
+  // Send OTP to Google Sheet (to trigger email)
+  // Note: The Google Script must handle 'send_otp' action
+  fetch(SHEET_URL, {
+    method: "POST",
+    mode: "no-cors", // GAS usually requires no-cors for simple posts
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "send_otp",
+      email: email,
+      otp: generatedOTP,
+      phone: phone
+    })
+  }).catch(err => console.error("Error sending OTP request:", err));
 
   // Switch to OTP step
-  emailStep.style.display = "none";
+  loginStep.style.display = "none";
   otpStep.style.display = "flex";
   maskedEmail.textContent = formatEmailMask(email);
 
@@ -169,20 +209,29 @@ function sendOTP() {
   startResendTimer();
 }
 
+function showPhoneError() {
+  phoneError.style.display = "block";
+  phoneError.style.animation = "none";
+  void phoneError.offsetWidth;
+  phoneError.style.animation = "";
+  phoneInput.focus();
+}
+
 function showEmailError() {
   emailError.style.display = "block";
   emailError.style.animation = "none";
   void emailError.offsetWidth;
   emailError.style.animation = "";
-  emailInput.focus();
+  if (phoneError.style.display === "none") emailInput.focus();
 }
+
+phoneInput.addEventListener("input", () => {
+  phoneError.style.display = "none";
+  phoneInput.value = phoneInput.value.replace(/[^0-9]/g, '');
+});
 
 emailInput.addEventListener("input", () => {
   emailError.style.display = "none";
-});
-
-emailInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") sendOTP();
 });
 
 /* =========================
@@ -210,8 +259,9 @@ function verifyOTP() {
   }
 
   // Success!
+  const phone = phoneInput.value.trim();
   const email = emailInput.value.trim();
-  setCurrentUser(email);
+  setCurrentUser(phone, email);
   stopResendTimer();
   showApp();
 }
@@ -279,13 +329,27 @@ otpDigits.forEach((input, idx) => {
    RESEND OTP
 ========================= */
 function resendOTP() {
+  const phone = phoneInput.value.trim();
+  const email = emailInput.value.trim();
+
   // Re-generate OTP
   generatedOTP = String(Math.floor(100000 + Math.random() * 900000));
   otpExpiryTime = Date.now() + (OTP_EXPIRY_SECONDS * 1000);
-  mockOTPCode.textContent = generatedOTP;
 
-  const email = emailInput.value.trim();
-  console.log(`[MOCK EMAIL] Resending OTP ${generatedOTP} to ${email}`);
+  console.log(`[SYSTEM] Resending OTP: ${generatedOTP} to ${email}`);
+
+  // Send OTP to Google Sheet again
+  fetch(SHEET_URL, {
+    method: "POST",
+    mode: "no-cors",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "send_otp",
+      email: email,
+      otp: generatedOTP,
+      phone: phone
+    })
+  }).catch(err => console.error("Error resending OTP request:", err));
 
   clearOTPInputs();
   otpDigits[0].focus();
@@ -320,12 +384,12 @@ function stopResendTimer() {
 }
 
 /* =========================
-   BACK TO EMAIL
+   BACK TO LOGIN
 ========================= */
-function backToEmail() {
+function backToLogin() {
   otpStep.style.display = "none";
-  emailStep.style.display = "flex";
-  emailInput.focus();
+  loginStep.style.display = "flex";
+  phoneInput.focus();
   stopResendTimer();
 }
 
@@ -333,9 +397,9 @@ function backToEmail() {
    QUICK LOGIN (returning user)
 ========================= */
 function handleQuickLogin() {
-  const saved = getCurrentUserEmail();
-  if (!saved) return;
-  setCurrentUser(saved);
+  const saved = getCurrentUserSaved();
+  if (!saved || !saved.phone) return;
+  setCurrentUser(saved.phone, saved.email);
   showApp();
 }
 
@@ -512,7 +576,7 @@ function submitMission() {
   fetch(SHEET_URL, {
     method: "POST",
     body: JSON.stringify({
-      username:     currentUser.email,
+      username:     currentUser.phone,
       mission_type: type,
       token:        reward,
       lat:          currentLat,
