@@ -16,6 +16,7 @@
 
   <!-- Style -->
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="store_styles.css" />
 </head>
 <body>
 
@@ -40,7 +41,7 @@
         </div>
 
         <h1 class="login-title">ไม้ขีด</h1>
-        <p class="login-subtitle">แจ้งเหตุเผา ควัน ไฟป่า<br>เพื่ออากาศที่สะอาดขึ้น</p>
+        <p class="login-subtitle">ร่วมมือกันลดฝุ่น PM2.5<br>ด้วยพลังของทุกคน</p>
 
         <!-- STEP 1: Phone + Email Input -->
         <div id="loginStep" class="login-form">
@@ -118,7 +119,7 @@
           <button class="return-hint-btn" onclick="handleQuickLogin()">เข้า →</button>
         </div>
 
-<p class="login-footer-text">เปลี่ยนการแจ้งเหตุ → เป็นภารกิจ</p>
+<p class="login-footer-text">ลด PM2.5 → เริ่มที่เราทุกคน</p>
 
   <!-- ================= MAIN APP ================= -->
   <div id="appRoot" class="app-root" style="display:none;">
@@ -133,10 +134,10 @@
 
         <div class="header-right">
           <div class="stats-row">
-            <div class="stat-card tokens">
+            <div class="stat-card tokens" onclick="openStoreModal()" style="cursor: pointer;">
               <span class="stat-icon">🪙</span>
               <div class="stat-content">
-                <span class="stat-label">โทเค็น</span>
+                <span class="stat-label">โทเค็น (แลกของ)</span>
                 <span id="token" class="stat-value">0</span>
               </div>
             </div>
@@ -180,13 +181,13 @@
         </div>
 
         <h2 class="hero-title">
-          <span class="title-line">เปลี่ยนการแจ้งเหตุ</span>
-          <span class="title-highlight">เป็นภารกิจเพื่ออากาศสะอาด</span>
+          <span class="title-line">ช่วยกันลดฝุ่น PM2.5</span>
+          <span class="title-highlight">เริ่มที่การแจ้งเหตุของคุณ</span>
         </h2>
 
         <p class="hero-description">
-          ร่วมเป็นส่วนหนึ่งในการต่อสู้กับมลพิษทางอากาศ<br>
-          แจ้งเหตุการเผา ควันพิษ และรับรางวัลทันที
+          รายงานจุดเผาและแหล่งกำเนิดควัน<br>
+          ทุกข้อมูลของคุณช่วยให้เราจัดการปัญหาฝุ่นควันได้เร็วขึ้น
         </p>
 
         <button class="cta-button" onclick="openModal()">
@@ -233,6 +234,64 @@
         </div>
       </div>
     </main>
+
+    <!-- STORE MODAL -->
+    <div id="storeModal" class="modal">
+      <div class="modal-backdrop" onclick="closeStoreModal()"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 class="modal-title">
+            <span class="modal-icon">🏪</span>
+            ร้านค้าแลกของรางวัล
+          </h2>
+          <button class="modal-close" onclick="closeStoreModal()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <div class="store-balance">
+            <span>โทเค็นของคุณ:</span>
+            <strong id="storeTokenBalance" style="color: var(--primary);">0</strong>
+            <span>🪙</span>
+          </div>
+
+          <div class="store-items">
+            <!-- Item 1 -->
+            <div class="store-item" onclick="redeemItem(50, 'ส่วนลดค่าไฟ 20 บาท')">
+              <div class="item-icon">⚡</div>
+              <div class="item-details">
+                <div class="item-name">ส่วนลดค่าไฟ 20 บาท</div>
+                <div class="item-desc">ใช้ลดค่าไฟฟ้าในบิลถัดไป</div>
+              </div>
+              <div class="item-price">50 🪙</div>
+            </div>
+
+            <!-- Item 2 -->
+            <div class="store-item" onclick="redeemItem(100, 'บัตรของขวัญ 50 บาท')">
+              <div class="item-icon">🎁</div>
+              <div class="item-details">
+                <div class="item-name">บัตรของขวัญ 50 บาท</div>
+                <div class="item-desc">สำหรับซื้อสินค้าในร้านสะดวกซื้อ</div>
+              </div>
+              <div class="item-price">100 🪙</div>
+            </div>
+
+            <!-- Item 3 -->
+            <div class="store-item" onclick="redeemItem(200, 'ปลูกต้นไม้ 1 ต้น')">
+              <div class="item-icon">🌳</div>
+              <div class="item-details">
+                <div class="item-name">ปลูกต้นไม้ 1 ต้น</div>
+                <div class="item-desc">ร่วมปลูกป่าในชื่อของคุณ</div>
+              </div>
+              <div class="item-price">200 🪙</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- MODAL -->
     <div id="modal" class="modal">

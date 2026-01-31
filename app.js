@@ -1,8 +1,15 @@
 /* =========================
    CONSTANTS
 ========================= */
+// Global Error Handler for Debugging
+window.onerror = function(msg, url, line, col, error) {
+  alert(`Error: ${msg}\nLine: ${line}\nCol: ${col}`);
+  console.error("Global Error:", error);
+  return false;
+};
+
 const SHEET_URL =
-  "https://script.google.com/macros/s/AKfycby7sBvzh39iPd7_ov8Jsz_FYE2_pir_kPAFd7Swwl6Pks7SxHpuL8ktsJSXf56EhnWH/exec";
+  "https://script.google.com/macros/s/AKfycbykTdZi9uSydKlqWrDwVPbeSpTNvw221mFJR23buqMFO1XKybR0g3-lo8PRyKmUbu5X/exec";
 
 const STORAGE_KEY_CURRENT_USER = "airbounty_current_user_data";
 const USER_PREFIX = "airbounty_user_v2_";
@@ -48,6 +55,7 @@ let currentUser       = null; // { phone, email, missions, tokens }
 let generatedOTP      = null;
 let otpExpiryTime     = null;
 let resendCountdown   = null;
+let isSendingOTP      = false;
 
 /* =========================
    HELPERS – per-user storage
@@ -122,9 +130,26 @@ function formatEmailMask(email) {
    UI HELPERS
 ========================= */
 function showApp() {
-  loginScreen.style.display = "none";
-  appRoot.style.display = "block";
-  syncUI();
+  try {
+    console.log("[showApp] Switching to App View...");
+    if (!loginScreen || !appRoot) {
+      throw new Error("Critical DOM elements missing: loginScreen or appRoot");
+    }
+    
+    loginScreen.style.display = "flex";
+    appRoot.style.display = "block";
+    
+    // Force redraw check
+    if (appRoot.offsetParent === null) {
+      console.warn("[showApp] appRoot is still hidden!");
+    }
+
+    syncUI();
+    console.log("[showApp] Success");
+  } catch (e) {
+    alert("Error showing app: " + e.message);
+    console.error(e);
+  }
 }
 
 function showLogin() {
@@ -161,6 +186,8 @@ function syncUI() {
    STEP 1: SEND OTP
 ========================= */
 function sendOTP() {
+  if (isSendingOTP) return;
+  
   const phone = phoneInput.value.trim();
   const email = emailInput.value.trim();
 
@@ -177,6 +204,13 @@ function sendOTP() {
   }
 
   if (!valid) return;
+
+  isSendingOTP = true;
+  const sendBtn = document.querySelector('#loginStep .login-btn');
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.textContent = "กำลังส่ง...";
+  }
 
   // Generate 6-digit OTP locally (Client-side generation for GAS relay)
   generatedOTP = String(Math.floor(100000 + Math.random() * 900000));
@@ -196,107 +230,104 @@ function sendOTP() {
       otp: generatedOTP,
       phone: phone
     })
-  }).catch(err => console.error("Error sending OTP request:", err));
+  })
+  .catch(err => console.error("Error sending OTP request:", err))
+  .finally(() => {
+     isSendingOTP = false;
+     if (sendBtn) {
+       sendBtn.disabled = false;
+       sendBtn.textContent = "รับรหัส OTP";
+     }
+  });
 
   // Switch to OTP step
   loginStep.style.display = "none";
   otpStep.style.display = "flex";
   maskedEmail.textContent = formatEmailMask(email);
-
-  clearOTPInputs();
-  otpDigits[0].focus();
-
+  
   startResendTimer();
+  
+  // Focus first digit
+  setTimeout(() => otpDigits[0].focus(), 100);
 }
 
 function showPhoneError() {
   phoneError.style.display = "block";
-  phoneError.style.animation = "none";
-  void phoneError.offsetWidth;
-  phoneError.style.animation = "";
-  phoneInput.focus();
+  phoneInput.classList.add("input-error");
+  setTimeout(() => {
+    phoneError.style.display = "none";
+    phoneInput.classList.remove("input-error");
+  }, 3000);
 }
 
 function showEmailError() {
   emailError.style.display = "block";
-  emailError.style.animation = "none";
-  void emailError.offsetWidth;
-  emailError.style.animation = "";
-  if (phoneError.style.display === "none") emailInput.focus();
+  emailInput.classList.add("input-error");
+  setTimeout(() => {
+    emailError.style.display = "none";
+    emailInput.classList.remove("input-error");
+  }, 3000);
 }
-
-phoneInput.addEventListener("input", () => {
-  phoneError.style.display = "none";
-  phoneInput.value = phoneInput.value.replace(/[^0-9]/g, '');
-});
-
-emailInput.addEventListener("input", () => {
-  emailError.style.display = "none";
-});
 
 /* =========================
    STEP 2: VERIFY OTP
 ========================= */
 function verifyOTP() {
-  const enteredOTP = otpDigits.map(inp => inp.value).join("");
-
-  if (enteredOTP.length !== 6) {
-    showOTPError("กรุณากรอกรหัส OTP ให้ครบ 6 หลัก");
-    return;
-  }
-
   // Check expiry
   if (Date.now() > otpExpiryTime) {
-    showOTPError("รหัส OTP หมดอายุ กรุณาขอรหัสใหม่");
+    showOTPError("รหัส OTP หมดอายุแล้ว");
     return;
   }
 
-  // Check code
-  if (enteredOTP !== generatedOTP) {
+  const entered = otpDigits.map(d => d.value).join("").trim();
+  if (entered.length !== 6) {
+    showOTPError("กรุณากรอกรหัสให้ครบ 6 หลัก");
+    return;
+  }
+
+  // Debugging
+  console.log(`[Verify] Expected: "${generatedOTP}", Entered: "${entered}"`);
+
+  if (entered === generatedOTP) {
+    // SUCCESS
+    console.log("[Verify] OTP Correct. Logging in...");
+    const phone = phoneInput.value.trim();
+    const email = emailInput.value.trim();
+    
+    try {
+      setCurrentUser(phone, email);
+      showApp();
+    } catch (err) {
+      alert("Login Error: " + err.message);
+      console.error(err);
+    }
+  } else {
     showOTPError("รหัส OTP ไม่ถูกต้อง");
-    shakeOTPInputs();
-    return;
   }
-
-  // Success!
-  const phone = phoneInput.value.trim();
-  const email = emailInput.value.trim();
-  setCurrentUser(phone, email);
-  stopResendTimer();
-  showApp();
 }
 
 function showOTPError(msg) {
   otpError.textContent = msg;
   otpError.style.display = "block";
-  otpError.style.animation = "none";
-  void otpError.offsetWidth;
-  otpError.style.animation = "";
-}
-
-function shakeOTPInputs() {
-  otpDigits.forEach(inp => {
-    inp.classList.add("error");
-    setTimeout(() => inp.classList.remove("error"), 400);
-  });
+  otpDigits.forEach(d => d.classList.add("input-error"));
+  
+  setTimeout(() => {
+    otpError.style.display = "none";
+    otpDigits.forEach(d => d.classList.remove("input-error"));
+  }, 2500);
 }
 
 function clearOTPInputs() {
-  otpDigits.forEach(inp => {
-    inp.value = "";
-    inp.classList.remove("filled", "error");
+  otpDigits.forEach(d => {
+    d.value = "";
+    d.classList.remove("filled");
   });
-  otpError.style.display = "none";
 }
 
-/* =========================
-   OTP INPUT AUTO-FOCUS
-========================= */
+// Auto-focus next digit
 otpDigits.forEach((input, idx) => {
-  input.addEventListener("input", (e) => {
-    otpError.style.display = "none";
-
-    const val = e.target.value;
+  input.addEventListener("input", () => {
+    const val = input.value;
     if (val.length > 0) {
       input.classList.add("filled");
       // Move to next
@@ -321,6 +352,28 @@ otpDigits.forEach((input, idx) => {
   input.addEventListener("beforeinput", (e) => {
     if (e.data && !/^[0-9]$/.test(e.data)) {
       e.preventDefault();
+    }
+  });
+
+  // Handle Paste
+  input.addEventListener("paste", (e) => {
+    e.preventDefault();
+    const paste = (e.clipboardData || window.clipboardData).getData("text");
+    const clean = paste.replace(/\D/g, "").slice(0, 6);
+    
+    if (clean.length > 0) {
+      clean.split("").forEach((char, i) => {
+        if (otpDigits[i]) {
+          otpDigits[i].value = char;
+          otpDigits[i].classList.add("filled");
+        }
+      });
+      // Focus last filled or next empty
+      const focusIdx = Math.min(clean.length, 5);
+      otpDigits[focusIdx].focus();
+      
+      // Optional: Auto-submit if full
+      if (clean.length === 6) verifyOTP();
     }
   });
 });
@@ -440,8 +493,13 @@ function openModal() {
       gpsDisplay.textContent = currentLat.toFixed(5) + ", " + currentLng.toFixed(5);
       initMap(currentLat, currentLng);
     },
-    () => {
-      gpsDisplay.textContent = "ไม่สามารถดึงตำแหน่งได้";
+    (err) => {
+      console.warn("GPS Error:", err);
+      // Fallback location (Bangkok) if permission denied or error
+      currentLat = 13.7563;
+      currentLng = 100.5018;
+      gpsDisplay.textContent = "ไม่พบตำแหน่ง (ค่าเริ่มต้น: กทม.)";
+      initMap(currentLat, currentLng);
     },
     { enableHighAccuracy: true }
   );
@@ -449,6 +507,37 @@ function openModal() {
 
 function closeModal() {
   modal.classList.remove("active");
+}
+
+/* =========================
+   STORE / REDEEM LOGIC
+========================= */
+const storeModal = document.getElementById("storeModal");
+const storeTokenBalance = document.getElementById("storeTokenBalance");
+
+function openStoreModal() {
+  storeTokenBalance.textContent = currentUser.tokens;
+  storeModal.classList.add("active");
+}
+
+function closeStoreModal() {
+  storeModal.classList.remove("active");
+}
+
+function redeemItem(cost, itemName) {
+  if (currentUser.tokens >= cost) {
+    if (confirm(`ยืนยันแลก "${itemName}" ด้วย ${cost} โทเค็น?`)) {
+      currentUser.tokens -= cost;
+      saveUserData(currentUser);
+      syncUI();
+      storeTokenBalance.textContent = currentUser.tokens;
+      
+      alert(`แลก "${itemName}" สำเร็จ!`);
+      // Optional: Record redemption to Google Sheet
+    }
+  } else {
+    alert("โทเค็นของคุณไม่เพียงพอ");
+  }
 }
 
 /* =========================
