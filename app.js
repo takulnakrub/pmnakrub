@@ -4,51 +4,71 @@
 const SHEET_URL =
   "https://script.google.com/macros/s/AKfycby7sBvzh39iPd7_ov8Jsz_FYE2_pir_kPAFd7Swwl6Pks7SxHpuL8ktsJSXf56EhnWH/exec";
 
-const STORAGE_KEY_CURRENT_USER = "airbounty_current_user"; // stores the logged-in name (or null)
-const USER_PREFIX = "airbounty_user_";                     // prefix + name = per-user data key
+const STORAGE_KEY_CURRENT_USER = "airbounty_current_phone";
+const USER_PREFIX = "airbounty_user_";
+
+const OTP_EXPIRY_SECONDS = 60;
 
 /* =========================
    DOM REFS
 ========================= */
-const loginScreen      = document.getElementById("loginScreen");
-const appRoot          = document.getElementById("appRoot");
-const loginNameInput   = document.getElementById("loginNameInput");
-const loginError       = document.getElementById("loginError");
-const returnHint       = document.getElementById("returnHint");
-const returnName       = document.getElementById("returnName");
-const userNameDisplay  = document.getElementById("userNameDisplay");
-const tokenEl          = document.getElementById("token");
-const missionCountEl   = document.getElementById("missionCount");
-const modal            = document.getElementById("modal");
-const gpsDisplay       = document.getElementById("gpsDisplay");
+const loginScreen       = document.getElementById("loginScreen");
+const appRoot           = document.getElementById("appRoot");
+const phoneStep         = document.getElementById("phoneStep");
+const otpStep           = document.getElementById("otpStep");
+const phoneInput        = document.getElementById("phoneInput");
+const phoneError        = document.getElementById("phoneError");
+const maskedPhone       = document.getElementById("maskedPhone");
+const mockOTPCode       = document.getElementById("mockOTPCode");
+const otpError          = document.getElementById("otpError");
+const returnHint        = document.getElementById("returnHint");
+const returnPhone       = document.getElementById("returnPhone");
+const resendText        = document.getElementById("resendText");
+const resendTimer       = document.getElementById("resendTimer");
+const userPhoneDisplay  = document.getElementById("userPhoneDisplay");
+const tokenEl           = document.getElementById("token");
+const missionCountEl    = document.getElementById("missionCount");
+const modal             = document.getElementById("modal");
+const gpsDisplay        = document.getElementById("gpsDisplay");
+
+const otpDigits = [
+  document.getElementById("otp1"),
+  document.getElementById("otp2"),
+  document.getElementById("otp3"),
+  document.getElementById("otp4"),
+  document.getElementById("otp5"),
+  document.getElementById("otp6")
+];
+
+/* =========================
+   STATE
+========================= */
+let currentUser       = null; // { phone, missions, tokens }
+let generatedOTP      = null;
+let otpExpiryTime     = null;
+let resendCountdown   = null;
 
 /* =========================
    HELPERS – per-user storage
 ========================= */
-function getUserKey(name) {
-  return USER_PREFIX + name.trim().toLowerCase();
+function getUserKey(phone) {
+  return USER_PREFIX + phone.replace(/\D/g, '');
 }
 
-function loadUserData(name) {
-  const raw = localStorage.getItem(getUserKey(name));
+function loadUserData(phone) {
+  const raw = localStorage.getItem(getUserKey(phone));
   if (raw) return JSON.parse(raw);
-  // brand new user
-  return { displayName: name.trim(), missions: 0, tokens: 0 };
+  return { phone, missions: 0, tokens: 0 };
 }
 
 function saveUserData(data) {
-  localStorage.setItem(getUserKey(data.displayName), JSON.stringify(data));
+  localStorage.setItem(getUserKey(data.phone), JSON.stringify(data));
 }
 
-/* =========================
-   CURRENT SESSION
-========================= */
-let currentUser = null; // { displayName, missions, tokens }
-
-function setCurrentUser(name) {
-  localStorage.setItem(STORAGE_KEY_CURRENT_USER, name);
-  currentUser = loadUserData(name);
-  saveUserData(currentUser); // ensure it exists
+function setCurrentUser(phone) {
+  localStorage.setItem(STORAGE_KEY_CURRENT_USER, phone);
+  currentUser = loadUserData(phone);
+  saveUserData(currentUser);
 }
 
 function clearCurrentUser() {
@@ -56,8 +76,24 @@ function clearCurrentUser() {
   currentUser = null;
 }
 
-function getCurrentUserName() {
+function getCurrentUserPhone() {
   return localStorage.getItem(STORAGE_KEY_CURRENT_USER);
+}
+
+/* =========================
+   PHONE VALIDATION
+========================= */
+function validatePhone(phone) {
+  const clean = phone.replace(/\D/g, '');
+  // Thai mobile: 10 digits starting with 0
+  return /^0[0-9]{9}$/.test(clean);
+}
+
+function formatPhoneMask(phone) {
+  const clean = phone.replace(/\D/g, '');
+  if (clean.length !== 10) return phone;
+  // 08X-XXX-XXXX
+  return clean[0] + clean[1] + clean[2] + '-XXX-' + clean.slice(-4);
 }
 
 /* =========================
@@ -72,70 +108,236 @@ function showApp() {
 function showLogin() {
   loginScreen.style.display = "flex";
   appRoot.style.display = "none";
-  loginNameInput.value = "";
-  loginError.style.display = "none";
+  phoneStep.style.display = "flex";
+  otpStep.style.display = "none";
+  phoneInput.value = "";
+  phoneError.style.display = "none";
+  clearOTPInputs();
 }
 
 function syncUI() {
   if (!currentUser) return;
-  userNameDisplay.textContent = currentUser.displayName;
-  tokenEl.textContent         = currentUser.tokens;
-  missionCountEl.textContent  = currentUser.missions;
+  userPhoneDisplay.textContent = formatPhoneMask(currentUser.phone);
+  tokenEl.textContent          = currentUser.tokens;
+  missionCountEl.textContent   = currentUser.missions;
 }
 
 /* =========================
    BOOT – check returning user
 ========================= */
 (function boot() {
-  const saved = getCurrentUserName();
+  const saved = getCurrentUserPhone();
   if (saved) {
-    // Show hint for returning user
-    returnName.textContent = saved;
+    returnPhone.textContent = formatPhoneMask(saved);
     returnHint.style.display = "flex";
   }
 })();
 
 /* =========================
-   LOGIN HANDLERS
+   STEP 1: SEND OTP
 ========================= */
-function handleLogin() {
-  const raw = loginNameInput.value.trim();
+function sendOTP() {
+  const phone = phoneInput.value.trim();
 
-  // Validate: at least 2 chars, only Thai / English / numbers / spaces
-  if (!raw || raw.length < 2) {
-    showError();
+  if (!validatePhone(phone)) {
+    showPhoneError();
     return;
   }
 
-  setCurrentUser(raw);
+  // Generate 6-digit OTP
+  generatedOTP = String(Math.floor(100000 + Math.random() * 900000));
+  otpExpiryTime = Date.now() + (OTP_EXPIRY_SECONDS * 1000);
+
+  // Show OTP in mock display
+  mockOTPCode.textContent = generatedOTP;
+
+  // TODO: Replace with actual SMS API call
+  // sendSMSviaAPI(phone, generatedOTP);
+
+  console.log(`[MOCK SMS] Sending OTP ${generatedOTP} to ${phone}`);
+
+  // Switch to OTP step
+  phoneStep.style.display = "none";
+  otpStep.style.display = "flex";
+  maskedPhone.textContent = formatPhoneMask(phone);
+
+  clearOTPInputs();
+  otpDigits[0].focus();
+
+  startResendTimer();
+}
+
+function showPhoneError() {
+  phoneError.style.display = "block";
+  phoneError.style.animation = "none";
+  void phoneError.offsetWidth;
+  phoneError.style.animation = "";
+  phoneInput.focus();
+}
+
+phoneInput.addEventListener("input", () => {
+  phoneError.style.display = "none";
+  // Auto-format or limit to numbers only
+  phoneInput.value = phoneInput.value.replace(/[^0-9]/g, '');
+});
+
+phoneInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") sendOTP();
+});
+
+/* =========================
+   STEP 2: VERIFY OTP
+========================= */
+function verifyOTP() {
+  const enteredOTP = otpDigits.map(inp => inp.value).join("");
+
+  if (enteredOTP.length !== 6) {
+    showOTPError("กรุณากรอกรหัส OTP ให้ครบ 6 หลัก");
+    return;
+  }
+
+  // Check expiry
+  if (Date.now() > otpExpiryTime) {
+    showOTPError("รหัส OTP หมดอายุ กรุณาขอรหัสใหม่");
+    return;
+  }
+
+  // Check code
+  if (enteredOTP !== generatedOTP) {
+    showOTPError("รหัส OTP ไม่ถูกต้อง");
+    shakeOTPInputs();
+    return;
+  }
+
+  // Success!
+  const phone = phoneInput.value.trim();
+  setCurrentUser(phone);
+  stopResendTimer();
   showApp();
 }
 
-function handleReturn() {
-  const saved = getCurrentUserName();
+function showOTPError(msg) {
+  otpError.textContent = msg;
+  otpError.style.display = "block";
+  otpError.style.animation = "none";
+  void otpError.offsetWidth;
+  otpError.style.animation = "";
+}
+
+function shakeOTPInputs() {
+  otpDigits.forEach(inp => {
+    inp.classList.add("error");
+    setTimeout(() => inp.classList.remove("error"), 400);
+  });
+}
+
+function clearOTPInputs() {
+  otpDigits.forEach(inp => {
+    inp.value = "";
+    inp.classList.remove("filled", "error");
+  });
+  otpError.style.display = "none";
+}
+
+/* =========================
+   OTP INPUT AUTO-FOCUS
+========================= */
+otpDigits.forEach((input, idx) => {
+  input.addEventListener("input", (e) => {
+    otpError.style.display = "none";
+
+    const val = e.target.value;
+    if (val.length > 0) {
+      input.classList.add("filled");
+      // Move to next
+      if (idx < 5) otpDigits[idx + 1].focus();
+    } else {
+      input.classList.remove("filled");
+    }
+  });
+
+  input.addEventListener("keydown", (e) => {
+    // Backspace: move to previous
+    if (e.key === "Backspace" && !input.value && idx > 0) {
+      otpDigits[idx - 1].focus();
+    }
+    // Enter on last digit: verify
+    if (e.key === "Enter" && idx === 5) {
+      verifyOTP();
+    }
+  });
+
+  // Only allow digits
+  input.addEventListener("beforeinput", (e) => {
+    if (e.data && !/^[0-9]$/.test(e.data)) {
+      e.preventDefault();
+    }
+  });
+});
+
+/* =========================
+   RESEND OTP
+========================= */
+function resendOTP() {
+  // Re-generate OTP
+  generatedOTP = String(Math.floor(100000 + Math.random() * 900000));
+  otpExpiryTime = Date.now() + (OTP_EXPIRY_SECONDS * 1000);
+  mockOTPCode.textContent = generatedOTP;
+
+  const phone = phoneInput.value.trim();
+  console.log(`[MOCK SMS] Resending OTP ${generatedOTP} to ${phone}`);
+
+  clearOTPInputs();
+  otpDigits[0].focus();
+  startResendTimer();
+}
+
+function startResendTimer() {
+  let remaining = OTP_EXPIRY_SECONDS;
+  const btn = document.querySelector(".resend-btn");
+
+  btn.disabled = true;
+  resendText.style.display = "none";
+  resendTimer.style.display = "inline";
+  resendTimer.textContent = `(${remaining})`;
+
+  resendCountdown = setInterval(() => {
+    remaining--;
+    resendTimer.textContent = `(${remaining})`;
+
+    if (remaining <= 0) {
+      stopResendTimer();
+    }
+  }, 1000);
+}
+
+function stopResendTimer() {
+  if (resendCountdown) clearInterval(resendCountdown);
+  const btn = document.querySelector(".resend-btn");
+  btn.disabled = false;
+  resendText.style.display = "inline";
+  resendTimer.style.display = "none";
+}
+
+/* =========================
+   BACK TO PHONE
+========================= */
+function backToPhone() {
+  otpStep.style.display = "none";
+  phoneStep.style.display = "flex";
+  phoneInput.focus();
+  stopResendTimer();
+}
+
+/* =========================
+   QUICK LOGIN (returning user)
+========================= */
+function handleQuickLogin() {
+  const saved = getCurrentUserPhone();
   if (!saved) return;
   setCurrentUser(saved);
   showApp();
 }
-
-function showError() {
-  loginError.style.display = "block";
-  // re-trigger shake animation
-  loginError.style.animation = "none";
-  void loginError.offsetWidth; // force reflow
-  loginError.style.animation = "";
-  loginNameInput.focus();
-}
-
-// Hide error on input
-loginNameInput.addEventListener("input", () => {
-  loginError.style.display = "none";
-});
-
-// Enter key submits
-loginNameInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") handleLogin();
-});
 
 /* =========================
    LOGOUT
@@ -227,7 +429,7 @@ function loadAllReports() {
           fillOpacity: 0.8
         })
           .addTo(map)
-          .bindPopup(`🔥 ${item.mission_type}<br>👤 ${item.username}`);
+          .bindPopup(`🔥 ${item.mission_type}<br>📱 ${item.username}`);
       });
     })
     .catch((err) => console.error("Load reports error:", err));
@@ -251,17 +453,15 @@ function submitMission() {
   const type   = selectedType ? selectedType.value : "เผาขยะ";
   const reward = Math.floor(Math.random() * 10) + 10;
 
-  // Update current user data
   currentUser.missions += 1;
   currentUser.tokens  += reward;
   saveUserData(currentUser);
   syncUI();
 
-  // Push to Google Sheet
   fetch(SHEET_URL, {
     method: "POST",
     body: JSON.stringify({
-      username:     currentUser.displayName,
+      username:     currentUser.phone,
       mission_type: type,
       token:        reward,
       lat:          currentLat,
@@ -276,8 +476,8 @@ function submitMission() {
    TOAST
 ========================= */
 function showToast(reward) {
-  const toast       = document.getElementById("successToast");
-  const rewardSpan  = document.getElementById("toastReward");
+  const toast      = document.getElementById("successToast");
+  const rewardSpan = document.getElementById("toastReward");
   rewardSpan.textContent = `+${reward}`;
   toast.classList.add("show");
   setTimeout(() => toast.classList.remove("show"), 3000);
