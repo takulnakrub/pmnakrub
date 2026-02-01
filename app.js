@@ -1,43 +1,45 @@
 /* =========================
-   CONSTANTS
+   ระบบรายงานภัยสิ่งแวดล้อมอัจฉริยะ
+   Features:
+   - 🤖 AI Image Screening
+   - ✅ Community Verification
+   - 🔥 Heatmap Visualization
 ========================= */
-// Global Error Handler for Debugging
+
+// Global Error Handler
 window.onerror = function(msg, url, line, col, error) {
-  alert(`Error: ${msg}\nLine: ${line}\nCol: ${col}`);
-  console.error("Global Error:", error);
+  console.error("Error:", msg, "Line:", line, "Col:", col);
   return false;
 };
 
-const SHEET_URL =
-  "https://script.google.com/macros/s/AKfycbykTdZi9uSydKlqWrDwVPbeSpTNvw221mFJR23buqMFO1XKybR0g3-lo8PRyKmUbu5X/exec";
-
+const SHEET_URL = "https://script.google.com/macros/s/AKfycbykTdZi9uSydKlqWrDwVPbeSpTNvw221mFJR23buqMFO1XKybR0g3-lo8PRyKmUbu5X/exec";
 const STORAGE_KEY_CURRENT_USER = "airbounty_current_user_data";
 const USER_PREFIX = "airbounty_user_v2_";
-
 const OTP_EXPIRY_SECONDS = 60;
 
 /* =========================
    DOM REFS
 ========================= */
-const loginScreen       = document.getElementById("loginScreen");
-const appRoot           = document.getElementById("appRoot");
-const loginStep         = document.getElementById("loginStep");
-const otpStep           = document.getElementById("otpStep");
-const phoneInput        = document.getElementById("phoneInput");
-const phoneError        = document.getElementById("phoneError");
-const emailInput        = document.getElementById("emailInput");
-const emailError        = document.getElementById("emailError");
-const maskedEmail       = document.getElementById("maskedEmail");
-const otpError          = document.getElementById("otpError");
-const returnHint        = document.getElementById("returnHint");
-const returnPhone       = document.getElementById("returnPhone");
-const resendText        = document.getElementById("resendText");
-const resendTimer       = document.getElementById("resendTimer");
-const userPhoneDisplay  = document.getElementById("userPhoneDisplay");
-const tokenEl           = document.getElementById("token");
-const missionCountEl    = document.getElementById("missionCount");
-const modal             = document.getElementById("modal");
-const gpsDisplay        = document.getElementById("gpsDisplay");
+const loginScreen = document.getElementById("loginScreen");
+const appRoot = document.getElementById("appRoot");
+const loginStep = document.getElementById("loginStep");
+const otpStep = document.getElementById("otpStep");
+const phoneInput = document.getElementById("phoneInput");
+const phoneError = document.getElementById("phoneError");
+const emailInput = document.getElementById("emailInput");
+const emailError = document.getElementById("emailError");
+const maskedEmail = document.getElementById("maskedEmail");
+const otpError = document.getElementById("otpError");
+const returnHint = document.getElementById("returnHint");
+const returnPhone = document.getElementById("returnPhone");
+const resendText = document.getElementById("resendText");
+const resendTimer = document.getElementById("resendTimer");
+const userPhoneDisplay = document.getElementById("userPhoneDisplay");
+const tokenEl = document.getElementById("token");
+const missionCountEl = document.getElementById("missionCount");
+const modal = document.getElementById("modal");
+const gpsDisplay = document.getElementById("gpsDisplay");
+const submitBtn = document.getElementById("submitBtn");
 
 const otpDigits = [
   document.getElementById("otp1"),
@@ -51,17 +53,22 @@ const otpDigits = [
 /* =========================
    STATE
 ========================= */
-let currentUser       = null; // { phone, email, missions, tokens }
-let generatedOTP      = null;
-let otpExpiryTime     = null;
-let resendCountdown   = null;
-let isSendingOTP      = false;
+let currentUser = null;
+let generatedOTP = null;
+let otpExpiryTime = null;
+let resendCountdown = null;
+let isSendingOTP = false;
+
+// AI & Verification State
+let aiScreeningResult = null;
+let allReports = [];
+let heatmapLayer = null;
+let heatmapActive = false;
 
 /* =========================
-   HELPERS – per-user storage
+   HELPERS
 ========================= */
 function getUserKey(phone) {
-  // Use phone as unique ID
   return USER_PREFIX + phone.replace(/\D/g, '');
 }
 
@@ -77,9 +84,7 @@ function saveUserData(data) {
 
 function setCurrentUser(phone, email) {
   let data = loadUserData(phone);
-  // Update email if changed or new
   if (email) data.email = email;
-  
   currentUser = data;
   localStorage.setItem(STORAGE_KEY_CURRENT_USER, JSON.stringify(currentUser));
   saveUserData(currentUser);
@@ -101,28 +106,23 @@ function getCurrentUserSaved() {
 ========================= */
 function validatePhone(phone) {
   const clean = phone.replace(/\D/g, '');
-  // Thai mobile: 10 digits starting with 0
   return /^0[0-9]{9}$/.test(clean);
 }
 
 function validateEmail(email) {
-  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return re.test(email);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 function formatPhoneMask(phone) {
   const clean = phone.replace(/\D/g, '');
   if (clean.length !== 10) return phone;
-  // 08X-XXX-XXXX
   return clean[0] + clean[1] + clean[2] + '-XXX-' + clean.slice(-4);
 }
 
 function formatEmailMask(email) {
   if (!email || !email.includes('@')) return email;
   const [local, domain] = email.split('@');
-  if (local.length <= 3) {
-    return local + '***@' + domain;
-  }
+  if (local.length <= 3) return local + '***@' + domain;
   return local.substring(0, 3) + '***@' + domain;
 }
 
@@ -130,26 +130,10 @@ function formatEmailMask(email) {
    UI HELPERS
 ========================= */
 function showApp() {
-  try {
-    console.log("[showApp] Switching to App View...");
-    if (!loginScreen || !appRoot) {
-      throw new Error("Critical DOM elements missing: loginScreen or appRoot");
-    }
-    
-    loginScreen.style.display = "flex";
-    appRoot.style.display = "block";
-    
-    // Force redraw check
-    if (appRoot.offsetParent === null) {
-      console.warn("[showApp] appRoot is still hidden!");
-    }
-
-    syncUI();
-    console.log("[showApp] Success");
-  } catch (e) {
-    alert("Error showing app: " + e.message);
-    console.error(e);
-  }
+  loginScreen.style.display = "none";
+  appRoot.style.display = "block";
+  syncUI();
+  loadAllReportsAndStats();
 }
 
 function showLogin() {
@@ -167,12 +151,12 @@ function showLogin() {
 function syncUI() {
   if (!currentUser) return;
   userPhoneDisplay.textContent = formatPhoneMask(currentUser.phone);
-  tokenEl.textContent          = currentUser.tokens;
-  missionCountEl.textContent   = currentUser.missions;
+  tokenEl.textContent = currentUser.tokens;
+  missionCountEl.textContent = currentUser.missions;
 }
 
 /* =========================
-   BOOT – check returning user
+   BOOT
 ========================= */
 (function boot() {
   const saved = getCurrentUserSaved();
@@ -183,14 +167,13 @@ function syncUI() {
 })();
 
 /* =========================
-   STEP 1: SEND OTP
+   OTP FUNCTIONS
 ========================= */
 function sendOTP() {
   if (isSendingOTP) return;
   
   const phone = phoneInput.value.trim();
   const email = emailInput.value.trim();
-
   let valid = true;
 
   if (!validatePhone(phone)) {
@@ -206,23 +189,14 @@ function sendOTP() {
   if (!valid) return;
 
   isSendingOTP = true;
-  const sendBtn = document.querySelector('#loginStep .login-btn');
-  if (sendBtn) {
-    sendBtn.disabled = true;
-    sendBtn.textContent = "กำลังส่ง...";
-  }
-
-  // Generate 6-digit OTP locally (Client-side generation for GAS relay)
   generatedOTP = String(Math.floor(100000 + Math.random() * 900000));
   otpExpiryTime = Date.now() + (OTP_EXPIRY_SECONDS * 1000);
 
-  console.log(`[SYSTEM] Generated OTP: ${generatedOTP} for Phone: ${phone}, Email: ${email}`);
+  console.log(`[OTP] Generated: ${generatedOTP}`);
 
-  // Send OTP to Google Sheet (to trigger email)
-  // Note: The Google Script must handle 'send_otp' action
   fetch(SHEET_URL, {
     method: "POST",
-    mode: "no-cors", // GAS usually requires no-cors for simple posts
+    mode: "no-cors",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       action: "send_otp",
@@ -230,24 +204,14 @@ function sendOTP() {
       otp: generatedOTP,
       phone: phone
     })
-  })
-  .catch(err => console.error("Error sending OTP request:", err))
-  .finally(() => {
-     isSendingOTP = false;
-     if (sendBtn) {
-       sendBtn.disabled = false;
-       sendBtn.textContent = "รับรหัส OTP";
-     }
+  }).finally(() => {
+    isSendingOTP = false;
   });
 
-  // Switch to OTP step
   loginStep.style.display = "none";
   otpStep.style.display = "flex";
   maskedEmail.textContent = formatEmailMask(email);
-  
   startResendTimer();
-  
-  // Focus first digit
   setTimeout(() => otpDigits[0].focus(), 100);
 }
 
@@ -269,11 +233,7 @@ function showEmailError() {
   }, 3000);
 }
 
-/* =========================
-   STEP 2: VERIFY OTP
-========================= */
 function verifyOTP() {
-  // Check expiry
   if (Date.now() > otpExpiryTime) {
     showOTPError("รหัส OTP หมดอายุแล้ว");
     return;
@@ -285,124 +245,51 @@ function verifyOTP() {
     return;
   }
 
-  // Debugging
-  console.log(`[Verify] Expected: "${generatedOTP}", Entered: "${entered}"`);
-
-  if (entered === generatedOTP) {
-    // SUCCESS
-    console.log("[Verify] OTP Correct. Logging in...");
-    const phone = phoneInput.value.trim();
-    const email = emailInput.value.trim();
-    
-    try {
-      setCurrentUser(phone, email);
-      showApp();
-    } catch (err) {
-      alert("Login Error: " + err.message);
-      console.error(err);
-    }
-  } else {
+  if (entered !== generatedOTP) {
     showOTPError("รหัส OTP ไม่ถูกต้อง");
+    return;
   }
+
+  setCurrentUser(phoneInput.value.trim(), emailInput.value.trim());
+  showApp();
 }
 
 function showOTPError(msg) {
   otpError.textContent = msg;
   otpError.style.display = "block";
-  otpDigits.forEach(d => d.classList.add("input-error"));
-  
-  setTimeout(() => {
-    otpError.style.display = "none";
-    otpDigits.forEach(d => d.classList.remove("input-error"));
-  }, 2500);
+  setTimeout(() => otpError.style.display = "none", 3000);
 }
 
 function clearOTPInputs() {
-  otpDigits.forEach(d => {
-    d.value = "";
-    d.classList.remove("filled");
-  });
+  otpDigits.forEach(d => d.value = "");
 }
 
-// Auto-focus next digit
-otpDigits.forEach((input, idx) => {
-  input.addEventListener("input", () => {
-    const val = input.value;
-    if (val.length > 0) {
-      input.classList.add("filled");
-      // Move to next
-      if (idx < 5) otpDigits[idx + 1].focus();
-    } else {
-      input.classList.remove("filled");
-    }
+// OTP input auto-focus
+otpDigits.forEach((digit, idx) => {
+  digit.addEventListener("input", (e) => {
+    if (e.target.value && idx < 5) otpDigits[idx + 1].focus();
   });
-
-  input.addEventListener("keydown", (e) => {
-    // Backspace: move to previous
-    if (e.key === "Backspace" && !input.value && idx > 0) {
+  digit.addEventListener("keydown", (e) => {
+    if (e.key === "Backspace" && !e.target.value && idx > 0) {
       otpDigits[idx - 1].focus();
-    }
-    // Enter on last digit: verify
-    if (e.key === "Enter" && idx === 5) {
-      verifyOTP();
-    }
-  });
-
-  // Only allow digits
-  input.addEventListener("beforeinput", (e) => {
-    if (e.data && !/^[0-9]$/.test(e.data)) {
-      e.preventDefault();
-    }
-  });
-
-  // Handle Paste
-  input.addEventListener("paste", (e) => {
-    e.preventDefault();
-    const paste = (e.clipboardData || window.clipboardData).getData("text");
-    const clean = paste.replace(/\D/g, "").slice(0, 6);
-    
-    if (clean.length > 0) {
-      clean.split("").forEach((char, i) => {
-        if (otpDigits[i]) {
-          otpDigits[i].value = char;
-          otpDigits[i].classList.add("filled");
-        }
-      });
-      // Focus last filled or next empty
-      const focusIdx = Math.min(clean.length, 5);
-      otpDigits[focusIdx].focus();
-      
-      // Optional: Auto-submit if full
-      if (clean.length === 6) verifyOTP();
     }
   });
 });
 
-/* =========================
-   RESEND OTP
-========================= */
 function resendOTP() {
-  const phone = phoneInput.value.trim();
-  const email = emailInput.value.trim();
-
-  // Re-generate OTP
   generatedOTP = String(Math.floor(100000 + Math.random() * 900000));
   otpExpiryTime = Date.now() + (OTP_EXPIRY_SECONDS * 1000);
 
-  console.log(`[SYSTEM] Resending OTP: ${generatedOTP} to ${email}`);
-
-  // Send OTP to Google Sheet again
   fetch(SHEET_URL, {
     method: "POST",
     mode: "no-cors",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       action: "send_otp",
-      email: email,
+      email: emailInput.value.trim(),
       otp: generatedOTP,
-      phone: phone
+      phone: phoneInput.value.trim()
     })
-  }).catch(err => console.error("Error resending OTP request:", err));
+  });
 
   clearOTPInputs();
   otpDigits[0].focus();
@@ -412,7 +299,6 @@ function resendOTP() {
 function startResendTimer() {
   let remaining = OTP_EXPIRY_SECONDS;
   const btn = document.querySelector(".resend-btn");
-
   btn.disabled = true;
   resendText.style.display = "none";
   resendTimer.style.display = "inline";
@@ -421,34 +307,22 @@ function startResendTimer() {
   resendCountdown = setInterval(() => {
     remaining--;
     resendTimer.textContent = `(${remaining})`;
-
     if (remaining <= 0) {
-      stopResendTimer();
+      clearInterval(resendCountdown);
+      btn.disabled = false;
+      resendText.style.display = "inline";
+      resendTimer.style.display = "none";
     }
   }, 1000);
 }
 
-function stopResendTimer() {
-  if (resendCountdown) clearInterval(resendCountdown);
-  const btn = document.querySelector(".resend-btn");
-  btn.disabled = false;
-  resendText.style.display = "inline";
-  resendTimer.style.display = "none";
-}
-
-/* =========================
-   BACK TO LOGIN
-========================= */
 function backToLogin() {
   otpStep.style.display = "none";
   loginStep.style.display = "flex";
   phoneInput.focus();
-  stopResendTimer();
+  if (resendCountdown) clearInterval(resendCountdown);
 }
 
-/* =========================
-   QUICK LOGIN (returning user)
-========================= */
 function handleQuickLogin() {
   const saved = getCurrentUserSaved();
   if (!saved || !saved.phone) return;
@@ -456,28 +330,24 @@ function handleQuickLogin() {
   showApp();
 }
 
-/* =========================
-   LOGOUT
-========================= */
 function handleLogout() {
   clearCurrentUser();
   showLogin();
 }
 
 /* =========================
-   MAP & GPS STATE
+   MAP & GPS
 ========================= */
 let currentLat = null;
 let currentLng = null;
-let map        = null;
-let marker     = null;
+let map = null;
+let marker = null;
 
-/* =========================
-   OPEN / CLOSE MODAL
-========================= */
 function openModal() {
   modal.classList.add("active");
   resetImageUpload();
+  aiScreeningResult = null;
+  submitBtn.disabled = true;
 
   if (!navigator.geolocation) {
     gpsDisplay.textContent = "อุปกรณ์ไม่รองรับ GPS";
@@ -495,7 +365,6 @@ function openModal() {
     },
     (err) => {
       console.warn("GPS Error:", err);
-      // Fallback location (Bangkok) if permission denied or error
       currentLat = 13.7563;
       currentLng = 100.5018;
       gpsDisplay.textContent = "ไม่พบตำแหน่ง (ค่าเริ่มต้น: กทม.)";
@@ -509,40 +378,6 @@ function closeModal() {
   modal.classList.remove("active");
 }
 
-/* =========================
-   STORE / REDEEM LOGIC
-========================= */
-const storeModal = document.getElementById("storeModal");
-const storeTokenBalance = document.getElementById("storeTokenBalance");
-
-function openStoreModal() {
-  storeTokenBalance.textContent = currentUser.tokens;
-  storeModal.classList.add("active");
-}
-
-function closeStoreModal() {
-  storeModal.classList.remove("active");
-}
-
-function redeemItem(cost, itemName) {
-  if (currentUser.tokens >= cost) {
-    if (confirm(`ยืนยันแลก "${itemName}" ด้วย ${cost} โทเค็น?`)) {
-      currentUser.tokens -= cost;
-      saveUserData(currentUser);
-      syncUI();
-      storeTokenBalance.textContent = currentUser.tokens;
-      
-      alert(`แลก "${itemName}" สำเร็จ!`);
-      // Optional: Record redemption to Google Sheet
-    }
-  } else {
-    alert("โทเค็นของคุณไม่เพียงพอ");
-  }
-}
-
-/* =========================
-   INIT MAP (LEAFLET)
-========================= */
 function initMap(lat, lng) {
   if (map) {
     map.setView([lat, lng], 16);
@@ -568,46 +403,121 @@ function initMap(lat, lng) {
   loadAllReports();
 }
 
-/* =========================
-   LOAD ALL REPORTS
-========================= */
-function loadAllReports() {
-  fetch(SHEET_URL)
-    .then((res) => res.json())
-    .then((data) => {
-      data.forEach((item) => {
-        if (!item.lat || !item.lng) return;
-        L.circleMarker([item.lat, item.lng], {
-          radius: 6,
-          color: "#ff5722",
-          fillOpacity: 0.8
-        })
-          .addTo(map)
-          .bindPopup(`🔥 ${item.mission_type}<br>📱 ${item.username}`);
-      });
-    })
-    .catch((err) => console.error("Load reports error:", err));
-}
-
-/* =========================
-   OPEN GOOGLE MAPS
-========================= */
 document.getElementById("openMapBtn").onclick = () => {
   if (!currentLat || !currentLng) return;
   window.open(`https://www.google.com/maps?q=${currentLat},${currentLng}`, "_blank");
 };
 
 /* =========================
-   IMAGE UPLOAD
+   🔥 HEATMAP TOGGLE
+========================= */
+function toggleHeatmap() {
+  const btn = document.getElementById("heatmapBtn");
+  const legend = document.getElementById("heatmapLegend");
+
+  if (heatmapActive) {
+    // ปิด heatmap
+    if (heatmapLayer) {
+      map.removeLayer(heatmapLayer);
+      heatmapLayer = null;
+    }
+    legend.classList.remove("active");
+    btn.classList.remove("active");
+    heatmapActive = false;
+  } else {
+    // เปิด heatmap
+    if (allReports.length > 0) {
+      const heatData = allReports
+        .filter(r => r.lat && r.lng)
+        .map(r => [r.lat, r.lng, 1]); // [lat, lng, intensity]
+
+      heatmapLayer = L.heatLayer(heatData, {
+        radius: 25,
+        blur: 15,
+        maxZoom: 17,
+        max: 1.0,
+        gradient: {
+          0.0: '#3b82f6',
+          0.5: '#eab308',
+          1.0: '#ef4444'
+        }
+      }).addTo(map);
+
+      legend.classList.add("active");
+      btn.classList.add("active");
+      heatmapActive = true;
+    } else {
+      alert("ยังไม่มีข้อมูลรายงานเพื่อแสดง Heatmap");
+    }
+  }
+}
+
+/* =========================
+   📥 LOAD ALL REPORTS & STATS
+========================= */
+function loadAllReportsAndStats() {
+  fetch(SHEET_URL)
+    .then(res => res.json())
+    .then(data => {
+      allReports = data;
+      
+      // Update stats
+      document.getElementById("totalReports").textContent = data.length;
+      
+      const verified = data.filter(r => r.verified_count >= 2).length;
+      document.getElementById("verifiedReports").textContent = verified;
+      
+      const accuracy = data.length > 0 ? Math.round((verified / data.length) * 100) : 0;
+      document.getElementById("accuracyRate").textContent = accuracy + "%";
+
+      // Update pending badge
+      const pending = data.filter(r => r.ai_approved && (!r.verified_count || r.verified_count < 2) && r.username !== currentUser.phone);
+      const badge = document.getElementById("pendingBadge");
+      if (pending.length > 0) {
+        badge.textContent = pending.length;
+        badge.style.display = "block";
+      } else {
+        badge.style.display = "none";
+      }
+    })
+    .catch(err => console.error("Load reports error:", err));
+}
+
+function loadAllReports() {
+  fetch(SHEET_URL)
+    .then(res => res.json())
+    .then(data => {
+      allReports = data;
+      data.forEach(item => {
+        if (!item.lat || !item.lng) return;
+        const color = item.verified_count >= 2 ? "#22c55e" : "#ff5722";
+        L.circleMarker([item.lat, item.lng], {
+          radius: 6,
+          color: color,
+          fillOpacity: 0.8
+        })
+        .addTo(map)
+        .bindPopup(`
+          🔥 ${item.mission_type}<br>
+          📱 ${item.username}<br>
+          ${item.verified_count >= 2 ? '✅ ยืนยันแล้ว' : '⏳ รอการยืนยัน'}
+        `);
+      });
+    })
+    .catch(err => console.error("Load reports error:", err));
+}
+
+/* =========================
+   🤖 AI IMAGE SCREENING
 ========================= */
 let currentImageBase64 = null;
 
-window.handleImageUpload = function(input) {
+window.handleImageUpload = async function(input) {
   if (input.files && input.files[0]) {
     const file = input.files[0];
     const reader = new FileReader();
 
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
       currentImageBase64 = e.target.result;
       const previewImage = document.getElementById('previewImage');
       const imagePlaceholder = document.getElementById('imagePlaceholder');
@@ -619,11 +529,149 @@ window.handleImageUpload = function(input) {
       }
       if (imagePlaceholder) imagePlaceholder.style.display = 'none';
       if (removeImageBtn) removeImageBtn.style.display = 'flex';
+
+      // 🤖 เริ่ม AI Screening
+      await runAIScreening(currentImageBase64);
     };
 
     reader.readAsDataURL(file);
   }
 };
+
+async function runAIScreening(imageBase64) {
+  const section = document.getElementById("aiScreeningSection");
+  const loadingState = document.getElementById("aiLoadingState");
+  const resultState = document.getElementById("aiResultState");
+
+  section.classList.add("active");
+  loadingState.style.display = "flex";
+  resultState.style.display = "none";
+  submitBtn.disabled = true;
+
+  try {
+    // ตรวจสอบ media type จาก base64
+    let mediaType = "image/jpeg";
+    if (imageBase64.startsWith("data:image/png")) {
+      mediaType = "image/png";
+    } else if (imageBase64.startsWith("data:image/webp")) {
+      mediaType = "image/webp";
+    } else if (imageBase64.startsWith("data:image/gif")) {
+      mediaType = "image/gif";
+    }
+
+    const base64Data = imageBase64.split(',')[1];
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": "ANTHROPIC_API_KEY_PLACEHOLDER"
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: mediaType,
+                  data: base64Data
+                }
+              },
+              {
+                type: "text",
+                text: `คุณเป็น AI ผู้เชี่ยวชาญในการตรวจจับภัยสิ่งแวดล้อม วิเคราะห์รูปภาพนี้และตอบในรูปแบบ JSON เท่านั้น:
+
+{
+  "is_environmental_hazard": true/false,
+  "hazard_type": "เผาขยะ/ไฟป่า/ควันโรงงาน/ควันรถ/ไม่พบภัย",
+  "confidence": 0-100,
+  "description": "คำอธิบายสั้นๆ ว่าเห็นอะไรในรูป ภาษาไทย"
+}
+
+ตรวจหา: ควัน, ไฟ, เปลวไฟ, การเผา, มลพิษทางอากาศ, ควันโรงงาน, ท่อควัน`
+              }
+            ]
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status} - ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log("AI Response:", data);
+    
+    const aiText = data.content.find(c => c.type === "text")?.text || "{}";
+    
+    // ลบ markdown code fences ถ้ามี
+    const cleanJson = aiText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const result = JSON.parse(cleanJson);
+
+    aiScreeningResult = result;
+
+    // แสดงผลลัพธ์
+    loadingState.style.display = "none";
+    resultState.style.display = "flex";
+
+    const resultIcon = document.getElementById("aiResultIcon");
+    const resultTitle = document.getElementById("aiResultTitle");
+    const resultDetail = document.getElementById("aiResultDetail");
+    const confidence = document.getElementById("aiConfidence");
+
+    if (result.is_environmental_hazard && result.confidence >= 70) {
+      resultIcon.textContent = "✅";
+      resultTitle.textContent = "ตรวจพบภัยสิ่งแวดล้อม";
+      resultDetail.textContent = result.description;
+      confidence.textContent = `🎯 ความมั่นใจ: ${result.confidence}%`;
+      confidence.className = "ai-confidence";
+      submitBtn.disabled = false;
+    } else if (result.is_environmental_hazard && result.confidence >= 40) {
+      resultIcon.textContent = "⚠️";
+      resultTitle.textContent = "พบภัยไม่แน่ชัด";
+      resultDetail.textContent = result.description + " - แนะนำให้ตรวจสอบเพิ่มเติม";
+      confidence.textContent = `⚠️ ความมั่นใจ: ${result.confidence}%`;
+      confidence.className = "ai-confidence medium";
+      submitBtn.disabled = false;
+    } else {
+      resultIcon.textContent = "❌";
+      resultTitle.textContent = "ไม่พบภัยสิ่งแวดล้อมที่ชัดเจน";
+      resultDetail.textContent = result.description;
+      confidence.textContent = `❌ ความมั่นใจ: ${result.confidence}%`;
+      confidence.className = "ai-confidence low";
+      submitBtn.disabled = true;
+    }
+
+  } catch (error) {
+    console.error("AI Screening Error:", error);
+    loadingState.style.display = "none";
+    resultState.style.display = "flex";
+    
+    const resultIcon = document.getElementById("aiResultIcon");
+    const resultTitle = document.getElementById("aiResultTitle");
+    const resultDetail = document.getElementById("aiResultDetail");
+    
+    resultIcon.textContent = "⚠️";
+    resultTitle.textContent = "เกิดข้อผิดพลาด";
+    
+    // แสดง error message ที่เป็นประโยชน์
+    if (error.message.includes("API Error")) {
+      resultDetail.textContent = "ไม่สามารถเชื่อมต่อ AI API ได้ กรุณาตรวจสอบ API Key หรือลองใหม่ในภายหลัง";
+    } else if (error.message.includes("JSON")) {
+      resultDetail.textContent = "AI ตอบกลับไม่ถูกต้อง กรุณาลองอัปโหลดรูปใหม่";
+    } else {
+      resultDetail.textContent = `ข้อผิดพลาด: ${error.message}`;
+    }
+    
+    submitBtn.disabled = true;
+  }
+}
 
 window.removeImage = function(event) {
   if (event) event.stopPropagation();
@@ -635,9 +683,11 @@ function resetImageUpload() {
   const previewImage = document.getElementById('previewImage');
   const imagePlaceholder = document.getElementById('imagePlaceholder');
   const removeImageBtn = document.getElementById('removeImageBtn');
+  const section = document.getElementById("aiScreeningSection");
 
   if (input) input.value = '';
   currentImageBase64 = null;
+  aiScreeningResult = null;
   
   if (previewImage) {
     previewImage.src = '';
@@ -645,44 +695,238 @@ function resetImageUpload() {
   }
   if (imagePlaceholder) imagePlaceholder.style.display = 'flex';
   if (removeImageBtn) removeImageBtn.style.display = 'none';
+  if (section) section.classList.remove("active");
+  
+  submitBtn.disabled = true;
 }
 
 /* =========================
-   SUBMIT MISSION
+   📤 SUBMIT MISSION
 ========================= */
 function submitMission() {
+  if (!currentImageBase64 || !aiScreeningResult || !aiScreeningResult.is_environmental_hazard) {
+    alert("กรุณาอัปโหลดรูปภาพที่ผ่านการตรวจสอบจาก AI");
+    return;
+  }
+
   closeModal();
 
   const selectedType = document.querySelector('input[name="type"]:checked');
-  const type   = selectedType ? selectedType.value : "เผาขยะ";
-  const reward = Math.floor(Math.random() * 10) + 10;
+  const type = selectedType ? selectedType.value : "เผาขยะ";
+  const reward = Math.floor(Math.random() * 10) + 15; // 15-25 tokens
 
   currentUser.missions += 1;
-  currentUser.tokens  += reward;
+  currentUser.tokens += reward;
   saveUserData(currentUser);
   syncUI();
 
+  // บันทึกพร้อม AI result
   fetch(SHEET_URL, {
     method: "POST",
     body: JSON.stringify({
-      username:     currentUser.phone,
+      username: currentUser.phone,
       mission_type: type,
-      token:        reward,
-      lat:          currentLat,
-      lng:          currentLng,
-      image:        currentImageBase64 || ""
+      token: reward,
+      lat: currentLat,
+      lng: currentLng,
+      image: currentImageBase64,
+      ai_approved: true,
+      ai_confidence: aiScreeningResult.confidence,
+      ai_description: aiScreeningResult.description,
+      verified_count: 0,
+      timestamp: new Date().toISOString()
     })
   });
 
   showToast(reward);
   resetImageUpload();
+  
+  // Reload stats after 1 second
+  setTimeout(loadAllReportsAndStats, 1000);
+}
+
+/* =========================
+   ✅ COMMUNITY VERIFICATION
+========================= */
+function openVerifyModal() {
+  const verifyModal = document.getElementById("verifyModal");
+  const listEl = document.getElementById("pendingReportsList");
+  
+  verifyModal.classList.add("active");
+  listEl.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">🔄 กำลังโหลด...</div>';
+
+  // โหลดรายงานที่รอการยืนยัน
+  fetch(SHEET_URL)
+    .then(res => res.json())
+    .then(data => {
+      // กรองเฉพาะรายงานที่:
+      // 1. ผ่าน AI แล้ว
+      // 2. ยังไม่ถึง 2 คนยืนยัน
+      // 3. ไม่ใช่รายงานของตัวเอง
+      const pending = data.filter(r => 
+        r.ai_approved && 
+        (!r.verified_count || r.verified_count < 2) &&
+        r.username !== currentUser.phone
+      );
+
+      if (pending.length === 0) {
+        listEl.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">✅</div>
+            <div class="empty-state-text">ไม่มีรายงานที่รอการยืนยัน<br>กลับมาตรวจสอบใหม่ภายหลัง</div>
+          </div>
+        `;
+        return;
+      }
+
+      // สร้าง cards
+      listEl.innerHTML = pending.map(report => {
+        const timeAgo = getTimeAgo(report.timestamp);
+        return `
+          <div class="pending-report-card" data-id="${report.id || report.timestamp}">
+            <div class="report-header">
+              <div class="report-type">
+                ${getTypeIcon(report.mission_type)} ${report.mission_type}
+              </div>
+              <div class="report-time">${timeAgo}</div>
+            </div>
+            
+            ${report.image ? `<img src="${report.image}" class="report-image" alt="รูปภาพรายงาน">` : ''}
+            
+            <div class="report-location">📍 ${report.lat?.toFixed(5)}, ${report.lng?.toFixed(5)}</div>
+            
+            <div class="ai-badge">
+              🤖 AI ตรวจสอบแล้ว: ${report.ai_confidence}% - ${report.ai_description}
+            </div>
+            
+            <div class="verify-actions">
+              <button class="verify-btn confirm" onclick="verifyReport('${report.id || report.timestamp}', true)">
+                ✅ ยืนยัน (+5 โทเค็น)
+              </button>
+              <button class="verify-btn reject" onclick="verifyReport('${report.id || report.timestamp}', false)">
+                ❌ รายงานผิด
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    })
+    .catch(err => {
+      console.error("Load pending reports error:", err);
+      listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#ef4444;">เกิดข้อผิดพลาด กรุณาลองใหม่</div>';
+    });
+}
+
+function closeVerifyModal() {
+  document.getElementById("verifyModal").classList.remove("active");
+}
+
+window.verifyReport = function(reportId, isValid) {
+  if (isValid) {
+    // ให้รางวัล 5 tokens
+    currentUser.tokens += 5;
+    saveUserData(currentUser);
+    syncUI();
+
+    // บันทึกการยืนยัน
+    fetch(SHEET_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "verify_report",
+        report_id: reportId,
+        verifier: currentUser.phone,
+        is_valid: true
+      })
+    });
+
+    showToast(5);
+    
+    // ลบ card ออกจากรายการ
+    const card = document.querySelector(`[data-id="${reportId}"]`);
+    if (card) card.remove();
+    
+    // ตรวจสอบว่าเหลือรายงานไหม
+    const remaining = document.querySelectorAll(".pending-report-card").length;
+    if (remaining === 0) {
+      closeVerifyModal();
+    }
+    
+    setTimeout(loadAllReportsAndStats, 500);
+  } else {
+    // ถ้ารายงานผิด ให้บันทึกแต่ไม่ให้โทเค็น
+    fetch(SHEET_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "verify_report",
+        report_id: reportId,
+        verifier: currentUser.phone,
+        is_valid: false
+      })
+    });
+
+    const card = document.querySelector(`[data-id="${reportId}"]`);
+    if (card) card.remove();
+    
+    alert("ขอบคุณที่ช่วยตรวจสอบ");
+  }
+};
+
+function getTimeAgo(timestamp) {
+  if (!timestamp) return "เมื่อสักครู่";
+  const now = new Date();
+  const past = new Date(timestamp);
+  const diff = Math.floor((now - past) / 1000 / 60); // minutes
+  
+  if (diff < 1) return "เมื่อสักครู่";
+  if (diff < 60) return `${diff} นาทีที่แล้ว`;
+  if (diff < 1440) return `${Math.floor(diff / 60)} ชั่วโมงที่แล้ว`;
+  return `${Math.floor(diff / 1440)} วันที่แล้ว`;
+}
+
+function getTypeIcon(type) {
+  const icons = {
+    "เผาขยะ": "🔥",
+    "ไฟป่า": "🌲",
+    "ควันดำรถ": "🚌",
+    "โรงงาน": "🏭"
+  };
+  return icons[type] || "🔥";
+}
+
+/* =========================
+   STORE / REDEEM
+========================= */
+const storeModal = document.getElementById("storeModal");
+const storeTokenBalance = document.getElementById("storeTokenBalance");
+
+function openStoreModal() {
+  storeTokenBalance.textContent = currentUser.tokens;
+  storeModal.classList.add("active");
+}
+
+function closeStoreModal() {
+  storeModal.classList.remove("active");
+}
+
+function redeemItem(cost, itemName) {
+  if (currentUser.tokens >= cost) {
+    if (confirm(`ยืนยันแลก "${itemName}" ด้วย ${cost} โทเค็น?`)) {
+      currentUser.tokens -= cost;
+      saveUserData(currentUser);
+      syncUI();
+      storeTokenBalance.textContent = currentUser.tokens;
+      alert(`แลก "${itemName}" สำเร็จ!`);
+    }
+  } else {
+    alert("โทเค็นของคุณไม่เพียงพอ");
+  }
 }
 
 /* =========================
    TOAST
 ========================= */
 function showToast(reward) {
-  const toast      = document.getElementById("successToast");
+  const toast = document.getElementById("successToast");
   const rewardSpan = document.getElementById("toastReward");
   rewardSpan.textContent = `+${reward}`;
   toast.classList.add("show");

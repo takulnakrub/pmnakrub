@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ไม้ขีด | แจ้งเหตุเผา ควัน ไฟป่า</title>
+  <title>ไม้ขีด | ระบบรายงานภัยสิ่งแวดล้อมอัจฉริยะ</title>
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,18 +13,19 @@
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Leaflet Heatmap -->
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 
   <!-- Style -->
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="store_styles.css" />
+  <link rel="stylesheet" href="extended_styles.css" />
 </head>
 <body>
 
   <!-- ================= LOGIN SCREEN ================= -->
   <div id="loginScreen" class="login-screen">
     <div class="login-container">
-
-      <!-- Ambient bg particles -->
       <div class="login-particles">
         <span class="lp lp1">🔥</span>
         <span class="lp lp2">🍃</span>
@@ -35,40 +36,23 @@
       </div>
 
       <div class="login-content">
-        <!-- Logo -->
         <div class="login-logo">
           <img src="logo.jpg" alt="ไม้ขีด logo" class="login-fire" />
         </div>
 
         <h1 class="login-title">ไม้ขีด</h1>
-        <p class="login-subtitle">ร่วมมือกันลดฝุ่น PM2.5<br>ด้วยพลังของทุกคน</p>
+        <p class="login-subtitle">ระบบรายงานภัยสิ่งแวดล้อมอัจฉริยะ<br>🤖 AI + 👥 ชุมชน</p>
 
-        <!-- STEP 1: Phone + Email Input -->
         <div id="loginStep" class="login-form">
           <div class="login-input-wrap">
             <span class="login-input-icon">📱</span>
-            <input
-              type="tel"
-              id="phoneInput"
-              name="phone"
-              class="login-input"
-              placeholder="เบอร์โทรศัพท์ (ใช้เป็นชื่อผู้ใช้)"
-              maxlength="10"
-              autocomplete="tel"
-            />
+            <input type="tel" id="phoneInput" class="login-input" placeholder="เบอร์โทรศัพท์" maxlength="10" />
           </div>
           <div id="phoneError" class="login-error" style="display:none;">กรุณากรอกเบอร์โทรที่ถูกต้อง</div>
 
           <div class="login-input-wrap" style="margin-top: 15px;">
             <span class="login-input-icon">✉️</span>
-            <input
-              type="email"
-              id="emailInput"
-              name="email"
-              class="login-input"
-              placeholder="อีเมล (สำหรับรับรหัส OTP)"
-              autocomplete="email"
-            />
+            <input type="email" id="emailInput" class="login-input" placeholder="อีเมล (รับรหัส OTP)" />
           </div>
           <div id="emailError" class="login-error" style="display:none;">กรุณากรอกอีเมลที่ถูกต้อง</div>
 
@@ -78,13 +62,8 @@
           </button>
         </div>
 
-        <!-- STEP 2: OTP Verification (hidden initially) -->
         <div id="otpStep" class="login-form" style="display:none;">
-          <p class="otp-sent-msg">
-            📩 ส่งรหัส 6 หลักไปที่<br>
-            <strong id="maskedEmail">use***@example.com</strong>
-          </p>
-
+          <p class="otp-sent-msg">📩 ส่งรหัส 6 หลักไปที่<br><strong id="maskedEmail"></strong></p>
           <div class="otp-inputs">
             <input type="text" maxlength="1" class="otp-digit" id="otp1" />
             <input type="text" maxlength="1" class="otp-digit" id="otp2" />
@@ -93,51 +72,44 @@
             <input type="text" maxlength="1" class="otp-digit" id="otp5" />
             <input type="text" maxlength="1" class="otp-digit" id="otp6" />
           </div>
-
           <div id="otpError" class="login-error" style="display:none;">รหัส OTP ไม่ถูกต้อง</div>
-
           <button class="login-btn" onclick="verifyOTP()">
             <span class="login-btn-text">ยืนยันรหัส</span>
             <span class="login-btn-check">✓</span>
           </button>
-
           <button class="resend-btn" onclick="resendOTP()">
             <span class="resend-icon">🔄</span>
             <span id="resendText">ส่งรหัสใหม่</span>
-            <span id="resendTimer" style="display:none;">(60)</span>
+            <span id="resendTimer" style="display:none;"></span>
           </button>
-
-          <button class="back-btn" onclick="backToLogin()">
-            ← แก้ไขข้อมูล
-          </button>
+          <button class="back-btn" onclick="backToLogin()">← แก้ไขข้อมูล</button>
         </div>
 
-        <!-- Returning user hint -->
         <div id="returnHint" class="return-hint" style="display:none;">
           <span class="return-hint-icon">👋</span>
           <span class="return-hint-text">สวัสดี <strong id="returnPhone"></strong></span>
           <button class="return-hint-btn" onclick="handleQuickLogin()">เข้า →</button>
         </div>
 
-<p class="login-footer-text">ลด PM2.5 → เริ่มที่เราทุกคน</p>
+        <p class="login-footer-text">🤖 AI + 👥 ชุมชน = 💪 ระบบอัจฉริยะ</p>
+      </div>
+    </div>
+  </div>
 
   <!-- ================= MAIN APP ================= -->
   <div id="appRoot" class="app-root" style="display:none;">
-
-    <!-- HEADER -->
     <header class="top-bar">
       <div class="header-content">
         <div class="logo-section">
-          <img src="logo.jpg" alt="ไม้ขีด logo" class="logo-icon" />
+          <img src="logo.jpg" alt="ไม้ขีด" class="logo-icon" />
           <h1 class="app-title">ไม้ขีด</h1>
         </div>
-
         <div class="header-right">
           <div class="stats-row">
-            <div class="stat-card tokens" onclick="openStoreModal()" style="cursor: pointer;">
+            <div class="stat-card tokens" onclick="openStoreModal()" style="cursor:pointer;">
               <span class="stat-icon">🪙</span>
               <div class="stat-content">
-                <span class="stat-label">โทเค็น (แลกของ)</span>
+                <span class="stat-label">โทเค็น</span>
                 <span id="token" class="stat-value">0</span>
               </div>
             </div>
@@ -149,13 +121,11 @@
               </div>
             </div>
           </div>
-
-          <!-- User badge + logout -->
           <div class="user-badge">
             <span class="user-avatar">📱</span>
             <span id="userPhoneDisplay" class="user-name">08X-XXX-XXXX</span>
-            <button class="logout-btn" onclick="handleLogout()" title="ออกจากระบบ">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <button class="logout-btn" onclick="handleLogout()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                 <polyline points="16 17 21 12 16 7"/>
                 <line x1="21" y1="12" x2="9" y2="12"/>
@@ -166,13 +136,10 @@
       </div>
     </header>
 
-    <!-- HERO SECTION -->
     <main class="hero-section">
       <div class="hero-content">
         <div class="impact-visual">
-          <div class="fire-circle">
-            <div class="fire-inner">🔥</div>
-          </div>
+          <div class="fire-circle"><div class="fire-inner">🔥</div></div>
           <div class="smoke-particles">
             <span class="particle p1">💨</span>
             <span class="particle p2">💨</span>
@@ -181,13 +148,14 @@
         </div>
 
         <h2 class="hero-title">
-          <span class="title-line">ช่วยกันลดฝุ่น PM2.5</span>
-          <span class="title-highlight">เริ่มที่การแจ้งเหตุของคุณ</span>
+          <span class="title-line">ระบบรายงานภัยอัจฉริยะ</span>
+          <span class="title-highlight">AI + ชุมชน ตรวจสอบร่วมกัน</span>
         </h2>
 
         <p class="hero-description">
-          รายงานจุดเผาและแหล่งกำเนิดควัน<br>
-          ทุกข้อมูลของคุณช่วยให้เราจัดการปัญหาฝุ่นควันได้เร็วขึ้น
+          🤖 AI วิเคราะห์รูปภาพอัตโนมัติ<br>
+          ✅ ชุมชนช่วยยืนยันความถูกต้อง<br>
+          🔥 Heatmap แสดงพื้นที่เสี่ยง
         </p>
 
         <button class="cta-button" onclick="openModal()">
@@ -196,41 +164,51 @@
           <span class="btn-arrow">→</span>
         </button>
 
-        <!-- Quick Stats Dashboard -->
         <div class="quick-stats">
           <div class="quick-stat">
-            <div class="qs-number">0</div>
+            <div class="qs-number" id="totalReports">0</div>
             <div class="qs-label">รายงานทั้งหมด</div>
           </div>
           <div class="divider"></div>
           <div class="quick-stat">
-            <div class="qs-number">0</div>
-            <div class="qs-label">ผู้ใช้งาน</div>
+            <div class="qs-number" id="verifiedReports">0</div>
+            <div class="qs-label">ยืนยันแล้ว</div>
           </div>
           <div class="divider"></div>
           <div class="quick-stat">
-            <div class="qs-number">0%</div>
-            <div class="qs-label">ความแม่นยำ</div>
+            <div class="qs-number" id="accuracyRate">0%</div>
+            <div class="qs-label">ความแม่นยำ AI</div>
           </div>
+        </div>
+
+        <div class="action-buttons">
+          <button class="action-btn" id="heatmapBtn" onclick="toggleHeatmap()">
+            <span class="btn-icon">🔥</span>
+            <span class="btn-text">Heatmap</span>
+          </button>
+          <button class="action-btn" onclick="openVerifyModal()">
+            <span class="btn-icon">✅</span>
+            <span class="btn-text">ยืนยันรายงาน</span>
+            <span class="badge" id="pendingBadge" style="display:none;">0</span>
+          </button>
         </div>
       </div>
 
-      <!-- Info Cards -->
       <div class="info-cards">
         <div class="info-card card-1">
-          <div class="card-icon">📍</div>
-          <h3>ระบุตำแหน่ง</h3>
-          <p>ใช้ GPS หรือเลือกจุดบนแผนที่</p>
+          <div class="card-icon">🤖</div>
+          <h3>AI คัดกรอง</h3>
+          <p>วิเคราะห์รูปอัตโนมัติ ลดรายงานปลอม</p>
         </div>
         <div class="info-card card-2">
-          <div class="card-icon">⚡</div>
-          <h3>รับโทเค็นทันที</h3>
-          <p>รางวัล 10-20 โทเค็นต่อรายงาน</p>
+          <div class="card-icon">✅</div>
+          <h3>ชุมชนยืนยัน</h3>
+          <p>ช่วยกันตรวจสอบ รับโทเค็นเพิ่ม</p>
         </div>
         <div class="info-card card-3">
-          <div class="card-icon">🌍</div>
-          <h3>ช่วยชุมชน</h3>
-          <p>ข้อมูลของคุณช่วยทุกคน</p>
+          <div class="card-icon">🔥</div>
+          <h3>Heatmap</h3>
+          <p>มองเห็นพื้นที่เสี่ยงชัดเจน</p>
         </div>
       </div>
     </main>
@@ -240,26 +218,20 @@
       <div class="modal-backdrop" onclick="closeStoreModal()"></div>
       <div class="modal-content">
         <div class="modal-header">
-          <h2 class="modal-title">
-            <span class="modal-icon">🏪</span>
-            ร้านค้าแลกของรางวัล
-          </h2>
+          <h2 class="modal-title"><span class="modal-icon">🏪</span> ร้านค้าแลกของรางวัล</h2>
           <button class="modal-close" onclick="closeStoreModal()">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
           </button>
         </div>
-
         <div class="modal-body">
           <div class="store-balance">
             <span>โทเค็นของคุณ:</span>
-            <strong id="storeTokenBalance" style="color: var(--primary);">0</strong>
+            <strong id="storeTokenBalance" style="color:var(--primary);">0</strong>
             <span>🪙</span>
           </div>
-
           <div class="store-items">
-            <!-- Item 1 -->
             <div class="store-item" onclick="redeemItem(50, 'ส่วนลดค่าไฟ 20 บาท')">
               <div class="item-icon">⚡</div>
               <div class="item-details">
@@ -268,8 +240,6 @@
               </div>
               <div class="item-price">50 🪙</div>
             </div>
-
-            <!-- Item 2 -->
             <div class="store-item" onclick="redeemItem(100, 'บัตรของขวัญ 50 บาท')">
               <div class="item-icon">🎁</div>
               <div class="item-details">
@@ -278,8 +248,6 @@
               </div>
               <div class="item-price">100 🪙</div>
             </div>
-
-            <!-- Item 3 -->
             <div class="store-item" onclick="redeemItem(200, 'ปลูกต้นไม้ 1 ต้น')">
               <div class="item-icon">🌳</div>
               <div class="item-details">
@@ -293,16 +261,12 @@
       </div>
     </div>
 
-    <!-- MODAL -->
+    <!-- REPORT MODAL -->
     <div id="modal" class="modal">
       <div class="modal-backdrop" onclick="closeModal()"></div>
       <div class="modal-content">
-
         <div class="modal-header">
-          <h2 class="modal-title">
-            <span class="modal-icon">🔥</span>
-            แจ้งจุดเผา / ควัน
-          </h2>
+          <h2 class="modal-title"><span class="modal-icon">🔥</span> แจ้งจุดเผา / ควัน</h2>
           <button class="modal-close" onclick="closeModal()">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"/>
@@ -311,7 +275,6 @@
         </div>
 
         <div class="modal-body">
-          <!-- Event Type Selection -->
           <div class="form-group">
             <label class="form-label">ประเภทเหตุการณ์</label>
             <div class="event-types">
@@ -346,23 +309,41 @@
             </div>
           </div>
 
-          <!-- Image Upload Section -->
           <div class="form-group">
-            <label class="form-label">รูปภาพจุดเกิดเหตุ</label>
+            <label class="form-label">
+              รูปภาพจุดเกิดเหตุ (จำเป็น - สำหรับ AI วิเคราะห์)
+              <span class="label-hint" style="display:block; margin-top:4px; font-size:12px; color:var(--text-muted);">
+                💡 ต้องตั้งค่า API Key ใน app.js ก่อนใช้งาน
+              </span>
+            </label>
             <div class="image-upload-container">
-              <input type="file" id="incidentImage" accept="image/*" style="display: none;" onchange="handleImageUpload(this)">
+              <input type="file" id="incidentImage" accept="image/*" style="display:none;" onchange="handleImageUpload(this)">
               <div class="image-preview-wrapper" onclick="document.getElementById('incidentImage').click()">
                 <div id="imagePlaceholder" class="image-placeholder">
                   <span class="upload-icon">📷</span>
                   <span class="upload-text">แตะเพื่อถ่ายรูป / เลือกรูป</span>
                 </div>
-                <img id="previewImage" class="preview-image" style="display: none;" />
-                <button id="removeImageBtn" class="remove-image-btn" style="display: none;" onclick="removeImage(event)">✕</button>
+                <img id="previewImage" class="preview-image" style="display:none;" />
+                <button id="removeImageBtn" class="remove-image-btn" style="display:none;" onclick="removeImage(event)">✕</button>
+              </div>
+
+              <div id="aiScreeningSection" class="ai-screening-section">
+                <div id="aiLoadingState" class="ai-status-loading">
+                  <div class="ai-spinner"></div>
+                  <span>🤖 AI กำลังวิเคราะห์รูปภาพ...</span>
+                </div>
+                <div id="aiResultState" class="ai-result" style="display:none;">
+                  <span id="aiResultIcon" class="ai-result-icon">✅</span>
+                  <div class="ai-result-content">
+                    <div id="aiResultTitle" class="ai-result-title"></div>
+                    <div id="aiResultDetail" class="ai-result-detail"></div>
+                    <span id="aiConfidence" class="ai-confidence"></span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- Map Section -->
           <div class="form-group">
             <label class="form-label">
               <span>ตำแหน่งที่เกิดเหตุ</span>
@@ -374,8 +355,14 @@
                 <span class="gps-icon">📍</span>
                 <span id="gpsDisplay" class="gps-text">กำลังดึงตำแหน่ง…</span>
               </div>
+              <div id="heatmapLegend" class="heatmap-legend">
+                <div class="legend-title">🔥 ความหนาแน่นรายงาน</div>
+                <div class="legend-gradient"><div class="gradient-bar"></div></div>
+                <div class="legend-labels">
+                  <span>น้อย</span><span>ปานกลาง</span><span>มาก</span>
+                </div>
+              </div>
             </div>
-
             <button id="openMapBtn" class="map-link-btn">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
@@ -387,19 +374,40 @@
         </div>
 
         <div class="modal-footer">
-          <button class="btn-secondary" onclick="closeModal()">
-            ยกเลิก
-          </button>
-          <button class="btn-primary" onclick="submitMission()">
+          <button class="btn-secondary" onclick="closeModal()">ยกเลิก</button>
+          <button class="btn-primary" id="submitBtn" onclick="submitMission()" disabled>
             <span>ส่งรายงาน</span>
             <span class="btn-shimmer"></span>
           </button>
         </div>
-
       </div>
     </div>
 
-    <!-- SUCCESS TOAST -->
+    <!-- VERIFICATION MODAL -->
+    <div id="verifyModal" class="modal">
+      <div class="modal-backdrop" onclick="closeVerifyModal()"></div>
+      <div class="modal-content verify-modal-content">
+        <div class="modal-header">
+          <h2 class="modal-title"><span class="modal-icon">✅</span> ยืนยันรายงานจากชุมชน</h2>
+          <button class="modal-close" onclick="closeVerifyModal()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="verify-info">
+            <span class="verify-info-icon">💡</span>
+            <p class="verify-info-text">
+              ช่วยยืนยันรายงานที่ผ่านการตรวจจาก AI แล้ว<br>
+              <strong>รับ 5 โทเค็น</strong> ทุกครั้งที่ยืนยัน
+            </p>
+          </div>
+          <div id="pendingReportsList" class="pending-reports-list"></div>
+        </div>
+      </div>
+    </div>
+
     <div id="successToast" class="toast">
       <div class="toast-content">
         <span class="toast-icon">✅</span>
@@ -409,10 +417,8 @@
         </div>
       </div>
     </div>
+  </div>
 
-  </div><!-- end #appRoot -->
-
-  <!-- ================= SCRIPT ================= -->
   <script src="app.js"></script>
 </body>
 </html>
